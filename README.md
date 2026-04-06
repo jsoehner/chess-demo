@@ -1,33 +1,29 @@
-"# ♟️ Chess WASM Demo
+# ♜ Advanced Grandmaster AI
 
-A modern, browser-based chess game powered by **WebAssembly** (WASM) for optimal performance.
+A modern, browser-based chess game featuring a robust AI opponent powered by Web Workers and Advanced Minimax algorithms.
 
 ## 🎯 Features
 
-- ⚡ **WebAssembly Game Engine** - Fast, native-code performance
-- 🎮 Full chess rules (castling, en passant, promotion)
-- 🎨 Clean, responsive UI with intuitive controls
-- 🏆 Check/checkmate detection and game over handling
-- 🔄 Fallback to browser JS if WASM unavailable
+- ⚡ **Web Worker Architecture** - Fast performance that never blocks or freezes the user interface.
+- 🎮 **Full Chess Rules** - Castling, en passant, pawn promotion, and strict check/checkmate validation (powered by `chess.js`).
+- 🧠 **Alpha-Beta Pruning Minimax** - Optimizing search depths significantly allowing the AI to look several moves ahead.
+- ♟️ **Positional Piece-Square Tables** - Detailed positional evaluation forcing the AI to control the center and protect the King.
+- 🎨 **Premium Glassmorphism UI** - Modern responsive design with smooth animations.
 
 ## 📦 Files Structure
 
 ```
-src/
--chess-wasm-demo.html  # Main HTML game page
-src/chess-wasm-engine.js      # Chess game logic (WASM/JS)
-README.md                      # This documentation
+- index.html    # Main HTML game page, UI controller
+- engine.js     # Background Web Worker (AI Logic)
+- README.md     # This documentation
 ```
 
 ## 🚀 How to Run
 
 ### Option 1: Open Directly
+*NOTE: Since this uses Web Workers, opening directly via `file://` might be blocked by browser CORS policies for workers.*
 
-1. Copy `src/chess-wasm-demo.html` to your browser
-2. Open it in Chrome, Firefox, Safari, or Edge
-3. Enjoy the game!
-
-### Option 2: Local Server
+### Option 2: Local Server (Recommended)
 
 ```bash
 # Using Python
@@ -37,54 +33,26 @@ python3 -m http.server
 npx serve ./
 ```
 
-Then navigate to `http://localhost:8000/src/chess-wasm-demo.html`
+Then navigate to `http://localhost:8000/index.html`
 
 ## 🎮 Game Controls
 
 - Click a piece to select it
-- Valid moves are highlighted in light green
-- Click a highlighted square to move
-- Game automatically detects check/checkmate
+- Valid moves are highlighted with circle markers
+- Captures are highlighted with a ring outline
+- Match history logs automatically during the game
 
-## 🔧 WASM vs Browser JS
+## 🔧 Architecture Stack
 
-The demo tries to load a WASM chess engine first:
-- WASM version: Faster, native performance
-- Browser JS fallback: Chess.js library (if WASM unavailable)
-
-## 📝 License
-
-MIT License - Feel free to modify and distribute!
-
-## 🎨 Screenshots
-
-```
-┌────────────────────────────────────┐
-│  ♟️  Chess WASM Demo               │
-├────────────────────────────────────┤
-│                                    │
-│  [8x8 Chess Board]                 │
-│                                    │
-│  WASM Engine: ✓ Loaded ✓         │
-│                                    │
-└────────────────────────────────────┘
-```
-
-## 🛠️ Tech Stack
-
-- HTML5/CSS3
-- JavaScript (ES6+)
-- WebAssembly (WASM)
-- Unicode chess pieces
-- Zero external dependencies
+- HTML5/CSS3 Grid Layouts
+- JavaScript (ES6+) for UI handling
+- `chess.js` (via CDN) for game state and pseudo-legal move validation
+- Web Worker API (`engine.js`) for background processing
+- Alpha-Beta Pruning AI Search
 
 ## 🔗 Credits
-
-Chess pieces: Unicode Chess Symbols  
-Game Logic: Custom WASM implementation  
-UI Design: Modern, responsive layout
+Chess Rules Engine: [chess.js](https://github.com/jhlywa/chess.js)
 
 ---
 
-Enjoy playing chess with WASM! ♟️
-"
+Enjoy playing! ♟️

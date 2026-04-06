@@ -3,417 +3,794 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chess AI Prototype</title>
+    <title>Chess AI Simulator</title>
+    <!-- Include Chess.js from CDN for strict rule enforcement -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
-            font-family: 'Segoe UI', Tahoma, sans-serif; 
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); 
+            font-family: 'Inter', 'Segoe UI', Tahoma, sans-serif; 
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%); 
             min-height: 100vh; 
             display: flex; 
             flex-direction: column; 
             align-items: center; 
             justify-content: center;
             padding: 20px;
-            color: #fff;
+            color: #f8fafc;
         }
-        h1 { margin-bottom: 20px; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); }
-        .game-container { 
-            background: rgba(255,255,255,0.1); 
-            padding: 20px; 
-            border-radius: 10px; 
-            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        h1 { 
+            margin-bottom: 20px; 
+            font-size: 2.5rem;
+            text-shadow: 0 4px 12px rgba(0,0,0,0.5); 
+            background: linear-gradient(to right, #60a5fa, #c084fc);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
+        .container {
+            display: flex;
+            gap: 40px;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .game-panel { 
+            background: rgba(30, 41, 59, 0.7); 
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 30px; 
+            border-radius: 16px; 
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .info-panel {
+            background: rgba(30, 41, 59, 0.7); 
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 25px; 
+            border-radius: 16px; 
+            max-width: 300px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+        }
+        .info-panel h3 { margin-bottom: 15px; color: #94a3b8; text-transform: uppercase; font-size: 0.9rem; letter-spacing: 1px; }
+        
         #board { 
             display: grid; 
-            grid-template-columns: repeat(8, 60px); 
-            grid-template-rows: repeat(8, 60px); 
-            border: 3px solid #333; 
-            margin-bottom: 20px;
+            grid-template-columns: repeat(8, min(10vw, 65px)); 
+            grid-template-rows: repeat(8, min(10vw, 65px)); 
+            border: 4px solid #0f172a; 
+            border-radius: 4px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
         }
         .square { 
-            width: 60px; 
-            height: 60px; 
+            width: 100%; 
+            height: 100%; 
             display: flex; 
             align-items: center; 
             justify-content: center; 
-            font-size: 40px; 
+            font-size: min(6vw, 42px); 
             cursor: pointer; 
-            transition: all 0.2s;
+            transition: all 0.2s ease;
             user-select: none;
+            position: relative;
         }
-        .square.light { background: #eae8d6; color: #333; }
-        .square.dark { background: #769656; color: #fff; }
-        .square.selected { background: #baca44; }
-        .square.valid-move { background: #a2a485; position: relative; }
+        .square.light { background: #f1f5f9; color: #0f172a; }
+        .square.dark { background: #64748b; color: #f8fafc; }
+        .square.selected { background: #fbbf24 !important; }
+        .square.last-move { background: rgba(52, 211, 153, 0.5) !important; }
         .square.valid-move::after {
             content: '';
             position: absolute;
-            width: 20px;
-            height: 20px;
-            background: rgba(0,0,0,0.2);
+            width: 25%;
+            height: 25%;
+            background: rgba(0, 0, 0, 0.25);
             border-radius: 50%;
         }
+        .square.valid-capture::after {
+            content: '';
+            position: absolute;
+            width: 90%;
+            height: 90%;
+            border: 5px solid rgba(0, 0, 0, 0.2);
+            border-radius: 50%;
+            background: transparent;
+        }
+        .piece {
+            line-height: min(6vw, 42px);
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+        }
+        .piece.w {
+            color: #ffffff;
+            text-shadow: 0 0 2px #000, 0 0 4px #000;
+        }
+        .piece.b {
+            color: #111111;
+            text-shadow: 0 0 2px #fff, 0 0 4px #aaa;
+        }
+        #status-container {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
         #status { 
-            background: rgba(0,0,0,0.3); 
-            padding: 15px; 
-            border-radius: 8px; 
-            margin-bottom: 15px;
-            text-align: center;
-            font-size: 18px;
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+        .ai-thinking { 
+            color: #fbbf24;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
+        }
+        
+        .badge {
+            background: #3b82f6;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 0.8rem;
             font-weight: bold;
         }
-        .ai-thinking { color: #f5f687; }
+        
+        .history {
+            height: 200px;
+            overflow-y: auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-auto-rows: min-content;
+            gap: 8px;
+            margin-top: 15px;
+            font-family: monospace;
+            font-size: 1.1rem;
+        }
+        .history span { padding: 4px 8px; border-radius: 4px; background: rgba(255,255,255,0.05); }
+        .history span.white-move { color: #f8fafc; }
+        .history span.black-move { color: #94a3b8; }
+        
+        /* Custom scrollbar for history */
+        .history::-webkit-scrollbar { width: 6px; }
+        .history::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        
+        .feature-list { list-style: none; margin-top: 15px; }
+        .feature-list li { margin-bottom: 8px; color: #cbd5e1; font-size: 0.95rem; display: flex; align-items: center;}
+        .feature-list li::before { content: '✓'; color: #10b981; margin-right: 8px; font-weight: bold; }
+
+        /* --- Frontier Model Selector --- */
+        .model-selector {
+            margin-top: 28px;
+            border-top: 1px solid rgba(255,255,255,0.08);
+            padding-top: 20px;
+        }
+        .model-selector h3 { margin-bottom: 14px; color: #94a3b8; text-transform: uppercase; font-size: 0.9rem; letter-spacing: 1px; }
+        .engine-toggle {
+            display: flex;
+            background: rgba(15,23,42,0.6);
+            border-radius: 8px;
+            padding: 4px;
+            margin-bottom: 14px;
+            gap: 4px;
+        }
+        .engine-toggle button {
+            flex: 1; padding: 7px 4px; border: none; border-radius: 6px; cursor: pointer;
+            font-size: 0.78rem; font-weight: 600; font-family: 'Inter', sans-serif;
+            background: transparent; color: #64748b; transition: all 0.2s;
+        }
+        .engine-toggle button.active {
+            background: #3b82f6; color: #fff;
+            box-shadow: 0 2px 8px rgba(59,130,246,0.4);
+        }
+        .llm-config { display: none; flex-direction: column; gap: 10px; }
+        .llm-config.visible { display: flex; }
+        .llm-config label { font-size: 0.8rem; color: #94a3b8; margin-bottom: 2px; }
+        .llm-config select, .llm-config input {
+            background: rgba(15,23,42,0.8);
+            border: 1px solid rgba(255,255,255,0.12);
+            color: #f8fafc;
+            border-radius: 6px;
+            padding: 8px 10px;
+            font-size: 0.9rem;
+            font-family: 'Inter', sans-serif;
+            width: 100%;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .llm-config select:focus, .llm-config input:focus { border-color: #3b82f6; }
+        .llm-config input[type=password] { font-family: monospace; letter-spacing: 2px; }
+        .llm-status {
+            font-size: 0.78rem; padding: 6px 10px; border-radius: 6px;
+            background: rgba(15,23,42,0.5); color: #64748b;
+            display: flex; align-items: center; gap: 6px;
+        }
+        .llm-status .dot {
+            width: 7px; height: 7px; border-radius: 50%;
+            background: #475569; flex-shrink: 0;
+        }
+        .llm-status.ready .dot { background: #10b981; }
+        .llm-status.ready { color: #10b981; }
+        .llm-status.error .dot { background: #ef4444; }
+        .llm-status.error { color: #ef4444; }
+        
+        button.reset {
+            background: #ef4444; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: bold; font-family: 'Inter', sans-serif;
+            margin-top: 20px; width: 100%; transition: background 0.2s;
+        }
+        button.reset:hover { background: #dc2626; }
+        
+        .player-info {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 10px 0;
+            padding: 10px 20px;
+            background: rgba(15, 23, 42, 0.5);
+            border-radius: 8px;
+            font-weight: bold;
+            color: #94a3b8;
+        }
+        .clock {
+            font-family: monospace;
+            font-size: 1.5rem;
+            background: #0f172a;
+            padding: 5px 15px;
+            border-radius: 6px;
+            color: #f8fafc;
+            border: 2px solid transparent;
+            transition: all 0.2s;
+        }
+        .clock.active {
+            background: #1e293b;
+            color: #fbbf24;
+            border-color: #fbbf24;
+            box-shadow: 0 0 10px rgba(251, 191, 36, 0.3);
+        }
     </style>
 </head>
 <body>
-    <h1>♟️ Play against AI</h1>
+    <h1>♜ Advanced Grandmaster AI</h1>
     
-    <div class="game-container">
-        <div id="status">Initializing...</div>
-        <div id="board"></div>
-        <div style="margin-top: 10px; text-align: center; opacity: 0.8;">
-            <small>You are White. Click a piece to move.</small>
+    <div class="container">
+        <div class="game-panel">
+            <div id="status-container">
+                <div id="status">Initializing Engine...</div>
+                <div class="badge" id="engine-type">Web Worker + Alpha-Beta</div>
+            </div>
+            
+            <div class="player-info">
+               <span>🤖 Advanced AI (Black)</span>
+               <div class="clock" id="timer-b">10:00.0</div>
+            </div>
+
+            <div id="board"></div>
+
+            <div class="player-info">
+               <span>👤 You (White)</span>
+               <div class="clock active" id="timer-w">10:00.0</div>
+            </div>
+            
+            <button class="reset" onclick="resetGame()">Restart Game</button>
+        </div>
+        
+        <div class="info-panel">
+            <h3>Engine Capabilities</h3>
+            <ul class="feature-list">
+                <li>Full Chess Rules Validated</li>
+                <li>En Passant &amp; Castling</li>
+                <li>Alpha-Beta Pruning</li>
+                <li>Positional Piece-Square Tables</li>
+                <li>Asynchronous Web Worker</li>
+            </ul>
+
+            <!-- Frontier Model Selector -->
+            <div class="model-selector">
+                <h3>AI Backend</h3>
+                <div class="engine-toggle">
+                    <button id="btn-local" class="active" onclick="setEngine('local')">⚙️ Local Engine</button>
+                    <button id="btn-llm" onclick="setEngine('llm')">🌐 Frontier Model</button>
+                </div>
+                <div class="llm-config" id="llm-config">
+                    <div>
+                        <label for="model-select">Model</label>
+                        <select id="model-select" onchange="onModelChange()">
+                            <optgroup label="Google">
+                                <option value="gemini-2.5-pro-exp-03-25">Gemini 2.5 Pro</option>
+                                <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                            </optgroup>
+                            <optgroup label="Anthropic">
+                                <option value="claude-opus-4-5">Claude Opus 4.5</option>
+                                <option value="claude-sonnet-4-5">Claude Sonnet 4.5</option>
+                            </optgroup>
+                            <optgroup label="OpenAI">
+                                <option value="gpt-4o">GPT-4o</option>
+                                <option value="o3-mini">o3-mini</option>
+                            </optgroup>
+                            <optgroup label="Local">
+                                <option value="local-openai">Local LLM (OpenAI-compatible)</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                    <div id="base-url-row" style="display:none">
+                        <label for="base-url-input">Base URL</label>
+                        <input type="text" id="base-url-input" placeholder="http://open-webui:8080/api" value="http://open-webui:8080/api" oninput="onBaseUrlChange()" />
+                    </div>
+                    <div id="local-model-row" style="display:none">
+                        <label for="local-model-input">Model Name</label>
+                        <input type="text" id="local-model-input" placeholder="e.g. llama3, mistral, gemma3" oninput="onLocalModelChange()" />
+                    </div>
+                    <div>
+                        <label for="api-key-input">API Key</label>
+                        <input type="password" id="api-key-input" placeholder="Paste your API key…" oninput="onApiKeyChange()" />
+                    </div>
+                    <div class="llm-status" id="llm-status">
+                        <span class="dot"></span>
+                        <span id="llm-status-text">Enter an API key to activate</span>
+                    </div>
+                </div>
+            </div>
+
+            <h3 style="margin-top: 28px;">Match History</h3>
+            <div class="history" id="history"></div>
         </div>
     </div>
 
     <script>
-        // --- CHESS ENGINE LOGIC ---
-        const pieceMovesGlobal = {
-            p: function(row, col, board) {
-                const moves = [];
-                const color = board[row][col].color;
-                const direction = color === 'w' ? -1 : 1;
-                const startRow = color === 'w' ? 6 : 1;
-                
-                if (row + direction >= 0 && row + direction < 8 && !board[row + direction][col]) {
-                    moves.push({ row: row + direction, col: col });
-                    if (row === startRow && !board[row + direction * 2][col]) {
-                        moves.push({ row: row + direction * 2, col: col });
-                    }
-                }
-                
-                [[row + direction, col - 1], [row + direction, col + 1]].forEach(([r, c]) => {
-                    if (r >= 0 && r < 8 && c >= 0 && c < 8) {
-                        const target = board[r][c];
-                        if (target && target.color !== color) {
-                            moves.push({ row: r, col: c, capture: true });
-                        }
-                    }
-                });
-                return moves;
-            },
-            n: function(row, col, board) {
-                const moves = [];
-                const offsets = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
-                offsets.forEach(([dr, dc]) => {
-                    const r = row + dr, c = col + dc;
-                    if (r >= 0 && r < 8 && c >= 0 && c < 8) {
-                        const target = board[r][c];
-                        if (!target || target.color !== board[row][col].color) {
-                            moves.push({ row: r, col: c, capture: !!target });
-                        }
-                    }
-                });
-                return moves;
-            },
-            b: function(row, col, board) {
-                const moves = [];
-                const directions = [[-1,-1],[-1,1],[1,-1],[1,1]];
-                for (let [dRow, dCol] of directions) {
-                    let r = row + dRow, c = col + dCol;
-                    while (r >= 0 && r < 8 && c >= 0 && c < 8) {
-                        const target = board[r][c];
-                        if (!target) {
-                            moves.push({ row: r, col: c });
-                        } else {
-                            if (target.color !== board[row][col].color) {
-                                moves.push({ row: r, col: c, capture: true });
-                            }
-                            break;
-                        }
-                        r += dRow; c += dCol;
-                    }
-                }
-                return moves;
-            },
-            r: function(row, col, board) {
-                const moves = [];
-                const directions = [[-1,0],[1,0],[0,-1],[0,1]];
-                for (let [dRow, dCol] of directions) {
-                    let r = row + dRow, c = col + dCol;
-                    while (r >= 0 && r < 8 && c >= 0 && c < 8) {
-                        const target = board[r][c];
-                        if (!target) {
-                            moves.push({ row: r, col: c });
-                        } else {
-                            if (target.color !== board[row][col].color) {
-                                moves.push({ row: r, col: c, capture: true });
-                            }
-                            break;
-                        }
-                        r += dRow; c += dCol;
-                    }
-                }
-                return moves;
-            },
-            q: function(row, col, board) {
-                return [...this.b(row, col, board), ...this.r(row, col, board)];
-            },
-            k: function(row, col, board) {
-                const moves = [];
-                const offsets = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
-                offsets.forEach(([dr, dc]) => {
-                    const r = row + dr, c = col + dc;
-                    if (r >= 0 && r < 8 && c >= 0 && c < 8) {
-                        const target = board[r][c];
-                        if (!target || target.color !== board[row][col].color) {
-                            moves.push({ row: r, col: c, capture: !!target });
-                        }
-                    }
-                });
-                return moves;
+        // Use external chess.js library for ironclad rule processing
+        const game = new Chess();
+        
+        // Spawn our custom background engine (does not freeze UI!)
+        const aiWorker = new Worker('engine.js');
+        
+        let selectedSquare = null;
+        let validMoves = [];
+        let aiThinking = false;
+        let lastMove = null;
+
+        // --- Engine Mode ---
+        let engineMode = 'local'; // 'local' | 'llm'
+        let llmModel = 'gemini-2.5-pro-exp-03-25';
+        let llmApiKey = '';
+        let llmBaseUrl = 'http://open-webui:8080/api';
+        let llmLocalModelName = '';
+
+        function setEngine(mode) {
+            engineMode = mode;
+            document.getElementById('btn-local').classList.toggle('active', mode === 'local');
+            document.getElementById('btn-llm').classList.toggle('active', mode === 'llm');
+            document.getElementById('llm-config').classList.toggle('visible', mode === 'llm');
+            document.getElementById('engine-type').textContent =
+                mode === 'local' ? 'Web Worker + Alpha-Beta' : `🌐 ${getModelLabel()}`;
+        }
+
+        function getModelLabel() {
+            if (llmModel === 'local-openai') {
+                return llmLocalModelName ? `Local: ${llmLocalModelName}` : 'Local LLM';
+            }
+            return document.getElementById('model-select').selectedOptions[0]?.text || llmModel;
+        }
+
+        function isLocalModel() {
+            return llmModel === 'local-openai';
+        }
+
+        function onModelChange() {
+            llmModel = document.getElementById('model-select').value;
+            const isLocal = isLocalModel();
+            document.getElementById('base-url-row').style.display = isLocal ? 'block' : 'none';
+            document.getElementById('local-model-row').style.display = isLocal ? 'block' : 'none';
+            document.getElementById('engine-type').textContent = `🌐 ${getModelLabel()}`;
+            onApiKeyChange();
+        }
+
+        function onBaseUrlChange() {
+            llmBaseUrl = document.getElementById('base-url-input').value.trim() || 'http://open-webui:8080/api';
+        }
+
+        function onLocalModelChange() {
+            llmLocalModelName = document.getElementById('local-model-input').value.trim();
+            document.getElementById('engine-type').textContent = `🌐 ${getModelLabel()}`;
+            onApiKeyChange();
+        }
+
+        function onApiKeyChange() {
+            llmApiKey = document.getElementById('api-key-input').value.trim();
+            const statusEl = document.getElementById('llm-status');
+            const textEl = document.getElementById('llm-status-text');
+            const ready = llmApiKey && (!isLocalModel() || llmLocalModelName);
+            if (!ready) {
+                statusEl.className = 'llm-status';
+                textEl.textContent = isLocalModel() && llmApiKey
+                    ? 'Enter a model name to activate'
+                    : 'Enter an API key to activate';
+            } else {
+                statusEl.className = 'llm-status ready';
+                textEl.textContent = `Ready — ${getModelLabel()}`;
+            }
+        }
+
+        const DEEP_SEARCH_DEPTH = 4; // Thanks to alpha-beta, we can hit depth 4 without breaking a sweat!
+
+        // Unicode Pieces Map
+        const pieceIcons = {
+            'w': { 'k': '♚', 'q': '♛', 'r': '♜', 'b': '♝', 'n': '♞', 'p': '♟' },
+            'b': { 'k': '♚', 'q': '♛', 'r': '♜', 'b': '♝', 'n': '♞', 'p': '♟' }
+        };
+
+        const boardEl = document.getElementById('board');
+        const statusEl = document.getElementById('status');
+        const historyEl = document.getElementById('history');
+
+        let timeW = 600000;
+        let timeB = 600000;
+        let lastTime = Date.now();
+        let timerInterval = null;
+
+        function formatTime(ms) {
+            if (ms < 0) ms = 0;
+            const mins = Math.floor(ms / 60000);
+            const secs = Math.floor((ms % 60000) / 1000);
+            const decis = Math.floor((ms % 1000) / 100);
+            return `${mins}:${secs.toString().padStart(2, '0')}.${decis}`;
+        }
+
+        function updateTimers() {
+            if(game.game_over()) return;
+            const now = Date.now();
+            const delta = now - lastTime;
+            lastTime = now;
+            
+            if (game.history().length > 0 || aiThinking) {
+                 if (game.turn() === 'w') {
+                     timeW -= delta;
+                     if(timeW < 0) timeW = 0;
+                 } else {
+                     timeB -= delta;
+                     if(timeB < 0) timeB = 0;
+                 }
+            }
+
+            document.getElementById('timer-w').textContent = formatTime(timeW);
+            document.getElementById('timer-b').textContent = formatTime(timeB);
+            
+            if (timeW <= 0) {
+               statusEl.textContent = "Time out! Black wins.";
+               clearInterval(timerInterval);
+               syncClocks();
+            } else if (timeB <= 0) {
+               statusEl.textContent = "Time out! White wins.";
+               clearInterval(timerInterval);
+               syncClocks();
+            }
+        }
+
+        function syncClocks() {
+            document.getElementById('timer-w').classList.toggle('active', game.turn() === 'w' && !game.game_over() && timeW > 0);
+            document.getElementById('timer-b').classList.toggle('active', game.turn() === 'b' && !game.game_over() && timeB > 0);
+        }
+
+        // Handle Worker Responses
+        aiWorker.onmessage = function(e) {
+            aiThinking = false;
+            const move = e.data.bestMove;
+            
+            if (move) {
+                const moveResult = game.move(move);
+                lastMove = { from: moveResult.from, to: moveResult.to };
+                renderHistory(moveResult, false);
+                updateBoard();
+                checkGameOver();
+                syncClocks();
+            } else {
+                statusEl.textContent = "AI calculation failed!";
             }
         };
 
-        class ChessGameWrapper {
-            constructor() {
-                this.reset();
-            }
+        function resetGame() {
+            game.reset();
+            selectedSquare = null;
+            validMoves = [];
+            lastMove = null;
+            aiThinking = false;
+            historyEl.innerHTML = '';
+            updateBoard();
+            statusEl.textContent = "Your turn (White)";
             
-            reset() {
-                const createRow = (color, isPawns) => {
-                    if (isPawns) return Array(8).fill(null).map(() => ({color, type: 'p'}));
-                    return ['r','n','b','q','k','b','n','r'].map(type => ({color, type}));
-                };
-
-                this.board = [
-                    createRow('b', false), createRow('b', true),
-                    Array(8).fill(null), Array(8).fill(null), Array(8).fill(null), Array(8).fill(null),
-                    createRow('w', true), createRow('w', false)
-                ];
-                this.turn = 'w';
-                this.gameOver = false;
-            }
-            
-            getValidMovesForPiece(row, col, customBoard = this.board) {
-                const piece = customBoard[row][col];
-                if (!piece) return [];
-                return pieceMovesGlobal[piece.type](row, col, customBoard);
-            }
-
-            getAllMoves(color, currentBoard = this.board) {
-                const allMoves = [];
-                for (let r = 0; r < 8; r++) {
-                    for (let c = 0; c < 8; c++) {
-                        const piece = currentBoard[r][c];
-                        if (piece && piece.color === color) {
-                            const moves = this.getValidMovesForPiece(r, c, currentBoard);
-                            moves.forEach(move => {
-                                allMoves.push({ fromRow: r, fromCol: c, toRow: move.row, toCol: move.col });
-                            });
-                        }
-                    }
-                }
-                return allMoves;
-            }
-            
-            move(fromRow, fromCol, toRow, toCol) {
-                if (this.gameOver) return false;
-                
-                const piece = this.board[fromRow][fromCol];
-                this.board[toRow][toCol] = piece;
-                this.board[fromRow][fromCol] = null;
-                
-                // Switch turns
-                this.turn = this.turn === 'w' ? 'b' : 'w';
-                return true;
-            }
-
-            // Helper to simulate a move without affecting the real board (used by AI)
-            simulateMove(board, move) {
-                const newBoard = board.map(row => [...row]); // Copy board
-                newBoard[move.toRow][move.toCol] = newBoard[move.fromRow][move.fromCol];
-                newBoard[move.fromRow][move.fromCol] = null;
-                return newBoard;
-            }
-            
-            renderBoard() {
-                const boardEl = document.getElementById('board');
-                boardEl.innerHTML = '';
-                
-                const pieces = { 
-                    w: { k: '♔', q: '♕', r: '♖', b: '♗', n: '♘', p: '♙' }, 
-                    b: { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' } 
-                };
-                
-                for (let row = 0; row < 8; row++) {
-                    for (let col = 0; col < 8; col++) {
-                        const square = document.createElement('div');
-                        square.className = `square ${(row + col) % 2 === 0 ? 'light' : 'dark'}`;
-                        square.dataset.row = row;
-                        square.dataset.col = col;
-                        
-                        const piece = this.board[row][col];
-                        if (piece) {
-                            square.textContent = pieces[piece.color][piece.type];
-                        }
-                        
-                        // Only allow clicking if it's white's turn
-                        square.onclick = () => {
-                            if (this.turn === 'w') handleSquareClick(row, col);
-                        };
-                        boardEl.appendChild(square);
-                    }
-                }
-                highlightPieces();
-            }
+            clearInterval(timerInterval);
+            timeW = 600000;
+            timeB = 600000;
+            lastTime = Date.now();
+            timerInterval = setInterval(updateTimers, 100);
+            document.getElementById('timer-w').textContent = formatTime(timeW);
+            document.getElementById('timer-b').textContent = formatTime(timeB);
+            syncClocks();
         }
 
-        // --- AI LOGIC ENGINE ---
-        const AI_DEPTH = 3; // How many turns ahead the AI looks
-        
-        // Material values for evaluating the board
-        const pieceValues = { p: 10, n: 30, b: 30, r: 50, q: 90, k: 900 };
+        // Convert algebraic notation to x,y coords
+        const getXY = (square) => {
+            const col = square.charCodeAt(0) - 97;
+            const row = 8 - parseInt(square[1]);
+            return {row, col};
+        };
 
-        function evaluateBoard(board) {
-            let totalEvaluation = 0;
-            for (let r = 0; r < 8; r++) {
-                for (let c = 0; c < 8; c++) {
-                    const piece = board[r][c];
+        const getSquareStr = (row, col) => {
+            return String.fromCharCode(97 + col) + (8 - row);
+        };
+
+        function updateBoard() {
+            boardEl.innerHTML = '';
+            
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    const squareStr = getSquareStr(row, col);
+                    const piece = game.get(squareStr);
+                    
+                    const squareDiv = document.createElement('div');
+                    squareDiv.className = `square ${(row + col) % 2 === 0 ? 'light' : 'dark'}`;
+                    squareDiv.dataset.sq = squareStr;
+                    
+                    // Add piece
                     if (piece) {
-                        const value = pieceValues[piece.type];
-                        // Black is trying to minimize the score (negative), White is maximizing (positive)
-                        totalEvaluation += piece.color === 'w' ? value : -value;
+                        const pieceSpan = document.createElement('span');
+                        pieceSpan.className = `piece ${piece.color}`;
+                        pieceSpan.textContent = pieceIcons[piece.color][piece.type];
+                        squareDiv.appendChild(pieceSpan);
+                    }
+                    
+                    // Highlight selected
+                    if (selectedSquare === squareStr) {
+                        squareDiv.classList.add('selected');
+                    }
+
+                    // Highlight last move
+                    if (lastMove && (lastMove.from === squareStr || lastMove.to === squareStr)) {
+                        squareDiv.classList.add('last-move');
+                    }
+                    
+                    // Highlight valid moves
+                    const moveMatch = validMoves.find(m => m.to === squareStr);
+                    if (moveMatch) {
+                        if (game.get(squareStr) || moveMatch.flags.includes('e')) { // capture or en passant
+                            squareDiv.classList.add('valid-capture');
+                        } else {
+                            squareDiv.classList.add('valid-move');
+                        }
+                    }
+                    
+                    squareDiv.onclick = () => onSquareClick(squareStr);
+                    boardEl.appendChild(squareDiv);
+                }
+            }
+        }
+
+        function onSquareClick(square) {
+            if (aiThinking || game.game_over()) return;
+            
+            // If already selecting a piece, attempt to move
+            if (selectedSquare) {
+                const moveMatch = validMoves.find(m => m.to === square);
+                
+                if (moveMatch) {
+                    // Check for promotion
+                    let promotion = 'q'; // auto-queen for this simple demo
+                    
+                    const result = game.move({
+                        from: selectedSquare,
+                        to: square,
+                        promotion: promotion
+                    });
+                    
+                    if (result) {
+                        selectedSquare = null;
+                        validMoves = [];
+                        lastMove = { from: result.from, to: result.to };
+                        renderHistory(result, true);
+                        updateBoard();
+                        checkGameOver();
+                        syncClocks();
+                        
+                        if (!game.game_over() && timeW > 0 && timeB > 0) {
+                            triggerAI();
+                        }
+                        return;
                     }
                 }
             }
-            return totalEvaluation;
-        }
 
-        function minimax(board, depth, isMaximizingPlayer) {
-            if (depth === 0) {
-                return evaluateBoard(board);
-            }
-
-            if (isMaximizingPlayer) {
-                let bestVal = -Infinity;
-                const moves = game.getAllMoves('w', board);
-                for (let move of moves) {
-                    const newBoard = game.simulateMove(board, move);
-                    const value = minimax(newBoard, depth - 1, false);
-                    bestVal = Math.max(bestVal, value);
-                }
-                return bestVal;
+            // Select a new piece
+            const piece = game.get(square);
+            if (piece && piece.color === game.turn()) {
+                selectedSquare = square;
+                validMoves = game.moves({ square: square, verbose: true });
+                updateBoard();
             } else {
-                let bestVal = Infinity;
-                const moves = game.getAllMoves('b', board);
-                for (let move of moves) {
-                    const newBoard = game.simulateMove(board, move);
-                    const value = minimax(newBoard, depth - 1, true);
-                    bestVal = Math.min(bestVal, value);
-                }
-                return bestVal;
+                selectedSquare = null;
+                validMoves = [];
+                updateBoard();
             }
         }
 
-        function calculateBestMove() {
-            const possibleMoves = game.getAllMoves('b');
-            if (possibleMoves.length === 0) return null;
+        function triggerAI() {
+            aiThinking = true;
+            const label = engineMode === 'llm' ? getModelLabel() : 'Engine';
+            statusEl.innerHTML = `<span class="ai-thinking">${label} is deliberating...</span>`;
 
+            if (engineMode === 'llm' && llmApiKey) {
+                triggerLLMAI();
+            } else {
+                // Fall back to local Web Worker
+                if (engineMode === 'llm' && !llmApiKey) {
+                    document.getElementById('llm-status').className = 'llm-status error';
+                    document.getElementById('llm-status-text').textContent = 'No API key — using local engine';
+                }
+                aiWorker.postMessage({
+                    fen: game.fen(),
+                    depth: DEEP_SEARCH_DEPTH,
+                    aiColor: 'b'
+                });
+            }
+        }
+
+        // --- Frontier Model Integration ---
+
+        function getProvider(model) {
+            if (model.startsWith('gemini')) return 'google';
+            if (model.startsWith('claude')) return 'anthropic';
+            if (model === 'local-openai') return 'local';
+            return 'openai';
+        }
+
+        function buildChessPrompt() {
+            const fen = game.fen();
+            const legalMoves = game.moves();
+            const history = game.history().slice(-10).join(' ');
+            return `You are a grandmaster chess AI. Analyze the position and choose the single best legal move for Black.
+
+FEN: ${fen}
+Recent moves: ${history || 'none'}
+Legal moves available: ${legalMoves.join(', ')}
+
+Rules:
+- You MUST choose EXACTLY ONE move from the legal moves list above.
+- Respond with ONLY the move in algebraic notation (e.g. e5, Nf6, O-O) — nothing else.
+- Do not explain your reasoning. Just output the move.`;
+        }
+
+        async function triggerLLMAI() {
+            const provider = getProvider(llmModel);
+            const prompt = buildChessPrompt();
             let bestMove = null;
-            let bestValue = Infinity; // Black wants the lowest possible score
 
-            // Shuffle moves slightly to prevent the AI from playing the exact same game every time
-            possibleMoves.sort(() => Math.random() - 0.5);
+            try {
+                if (provider === 'google') {
+                    bestMove = await callGemini(prompt);
+                } else if (provider === 'anthropic') {
+                    bestMove = await callClaude(prompt);
+                } else if (provider === 'local') {
+                    bestMove = await callOpenAI(prompt, llmBaseUrl, llmLocalModelName);
+                } else {
+                    bestMove = await callOpenAI(prompt);
+                }
+            } catch (err) {
+                console.error('LLM error:', err);
+                document.getElementById('llm-status').className = 'llm-status error';
+                document.getElementById('llm-status-text').textContent = 'API error — falling back to local engine';
+                aiWorker.postMessage({ fen: game.fen(), depth: DEEP_SEARCH_DEPTH, aiColor: 'b' });
+                return;
+            }
 
-            for (let move of possibleMoves) {
-                const newBoard = game.simulateMove(game.board, move);
-                const boardValue = minimax(newBoard, AI_DEPTH - 1, true);
-                
-                if (boardValue < bestValue) {
-                    bestValue = boardValue;
-                    bestMove = move;
+            // Validate the returned move
+            const legalMoves = game.moves();
+            const matched = legalMoves.find(m => m === bestMove || m.replace(/[+#]/, '') === bestMove);
+
+            if (matched) {
+                const moveResult = game.move(matched);
+                if (moveResult) {
+                    aiThinking = false;
+                    lastMove = { from: moveResult.from, to: moveResult.to };
+                    renderHistory(moveResult, false);
+                    updateBoard();
+                    checkGameOver();
+                    syncClocks();
+                    document.getElementById('llm-status').className = 'llm-status ready';
+                    document.getElementById('llm-status-text').textContent = `Played: ${moveResult.san} — ${getModelLabel()}`;
+                    return;
                 }
             }
-            return bestMove;
+
+            // Model returned an illegal/unrecognized move — fall back
+            console.warn('LLM returned invalid move:', bestMove, '— falling back to local engine');
+            document.getElementById('llm-status').className = 'llm-status error';
+            document.getElementById('llm-status-text').textContent = `Invalid move "${bestMove}" — using local engine`;
+            aiWorker.postMessage({ fen: game.fen(), depth: DEEP_SEARCH_DEPTH, aiColor: 'b' });
         }
 
-        function makeAIMove() {
-            const bestMove = calculateBestMove();
-            if (bestMove) {
-                game.move(bestMove.fromRow, bestMove.fromCol, bestMove.toRow, bestMove.toCol);
-                game.renderBoard();
-                updateStatus();
-            } else {
-                document.getElementById('status').textContent = "Game Over!";
-                game.gameOver = true;
-            }
+        async function callGemini(prompt) {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${llmModel}:generateContent?key=${llmApiKey}`;
+            const body = {
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { temperature: 0.3, maxOutputTokens: 32 }
+            };
+            const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            if (!res.ok) throw new Error(`Gemini API ${res.status}: ${await res.text()}`);
+            const data = await res.json();
+            return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
         }
 
-
-        // --- GAME CONTROLLER ---
-        const game = new ChessGameWrapper();
-        let selectedPiece = null;
-        let validMoves = [];
-
-        function highlightPieces() {
-            const squares = document.querySelectorAll('.square');
-            squares.forEach(sq => {
-                const row = parseInt(sq.dataset.row);
-                const col = parseInt(sq.dataset.col);
-                
-                sq.classList.remove('selected', 'valid-move');
-                
-                if (selectedPiece && selectedPiece.row === row && selectedPiece.col === col) {
-                    sq.classList.add('selected');
-                }
-                
-                if (validMoves.some(m => m.row === row && m.col === col)) {
-                    sq.classList.add('valid-move');
-                }
+        async function callClaude(prompt) {
+            const res = await fetch('https://api.anthropic.com/v1/messages', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': llmApiKey,
+                    'anthropic-version': '2023-06-01',
+                    'anthropic-dangerous-direct-browser-access': 'true'
+                },
+                body: JSON.stringify({
+                    model: llmModel,
+                    max_tokens: 32,
+                    messages: [{ role: 'user', content: prompt }]
+                })
             });
+            if (!res.ok) throw new Error(`Claude API ${res.status}: ${await res.text()}`);
+            const data = await res.json();
+            return data.content?.[0]?.text?.trim();
         }
 
-        function handleSquareClick(row, col) {
-            if (game.turn !== 'w' || game.gameOver) return; // Prevent clicking during AI turn
+        async function callOpenAI(prompt, baseUrl = 'https://api.openai.com', modelOverride = null) {
+            // Normalise the base URL: strip trailing slash, ensure no double /v1
+            const base = baseUrl.replace(/\/$/, '').replace(/\/v1$/, '');
+            const endpoint = `${base}/v1/chat/completions`;
+            const modelName = modelOverride || llmModel;
+            const res = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${llmApiKey}` },
+                body: JSON.stringify({
+                    model: modelName,
+                    messages: [{ role: 'user', content: prompt }],
+                    max_tokens: 64,
+                    temperature: 0.3
+                })
+            });
+            if (!res.ok) throw new Error(`OpenAI-compat API ${res.status}: ${await res.text()}`);
+            const data = await res.json();
+            return data.choices?.[0]?.message?.content?.trim();
+        }
 
-            const piece = game.board[row][col];
-            const isMoveTarget = validMoves.find(m => m.row === row && m.col === col);
-            
-            if (isMoveTarget && selectedPiece) {
-                // Execute Player Move
-                game.move(selectedPiece.row, selectedPiece.col, row, col);
-                selectedPiece = null;
-                validMoves = [];
-                game.renderBoard();
-                
-                // Trigger AI Turn
-                document.getElementById('status').innerHTML = "<span class='ai-thinking'>AI is thinking...</span>";
-                setTimeout(makeAIMove, 50); // Small timeout to let the UI update before the AI locks up the thread
-
-            } else if (piece && piece.color === 'w') {
-                // Select own piece
-                selectedPiece = { row, col, piece };
-                validMoves = game.getValidMovesForPiece(row, col);
-                highlightPieces();
+        function checkGameOver() {
+            if (game.game_over()) {
+                if (game.in_checkmate()) {
+                    statusEl.textContent = `Checkmate! ${game.turn() === 'w' ? 'Black' : 'White'} wins.`;
+                } else if (game.in_draw()) {
+                    statusEl.textContent = "Draw!";
+                } else if (game.in_stalemate()) {
+                    statusEl.textContent = "Stalemate!";
+                }
+            } else if (game.in_check()) {
+                statusEl.innerHTML = `<span style="color:#ef4444">Check!</span> ${game.turn() === 'w' ? 'Your' : 'AI'} turn`;
             } else {
-                // Deselect
-                selectedPiece = null;
-                validMoves = [];
-                highlightPieces();
+                statusEl.textContent = `${game.turn() === 'w' ? 'Your' : 'AI'} turn`;
             }
         }
 
-        function updateStatus() {
-            if (game.gameOver) return;
-            const currentPlayer = game.turn === 'w' ? 'Your' : 'AI\'s';
-            document.getElementById('status').textContent = `${currentPlayer} Turn`;
+        function renderHistory(move, isWhite) {
+            const span = document.createElement('span');
+            span.className = isWhite ? 'white-move' : 'black-move';
+            span.textContent = move.san;
+            historyEl.appendChild(span);
+            historyEl.scrollTop = historyEl.scrollHeight;
         }
 
-        // Initialize Game
-        game.renderBoard();
-        updateStatus();
+        // Init
+        resetGame();
+
     </script>
 </body>
 </html>
