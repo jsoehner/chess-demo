@@ -480,7 +480,8 @@
             if (selectedSquare) {
                 const moveMatch = validMoves.find(m => m.to === square);
                 if (moveMatch) {
-                    const resultStr = engine.make_move(selectedSquare, square, 'q');
+                    const promo = moveMatch.flags.includes('p') ? 'q' : '';
+                    const resultStr = engine.make_move(selectedSquare, square, promo);
                     if (resultStr) {
                         const result = JSON.parse(resultStr);
                         selectedSquare = null;
