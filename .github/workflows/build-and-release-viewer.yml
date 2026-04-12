@@ -1,0 +1,303 @@
+name: Build and Release Chess Game Viewer
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: "Release type"
+        required: false
+        default: beta
+        type: choice
+        options:
+          - beta
+          - stable
+          - nightly
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  CARGO_TERM_COLOR: always
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build-and-package:
+    name: Build and Package Viewer
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: chess-engine
+
+      - name: Install wasm-pack
+        run: cargo install --locked wasm-pack
+
+      - name: Make build scripts executable
+        run: chmod +x build.sh package.sh
+
+      - name: Build and create package archive
+        run: ./package.sh
+
+      - name: List generated archives
+        run: |
+          ls -la chess-game-viewer-*.zip 2>/dev/null || true
+          ls -la chess-game-viewer-*.tar.gz 2>/dev/null || true
+
+      - name: Upload distribution artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: viewer-distribution-${{ github.run_id }}
+          path: |
+            chess-game-viewer-*.zip
+            chess-game-viewer-*.tar.gz
+          if-no-files-found: error
+          retention-days: 30
+
+  test-distribution:
+    name: Test Distribution Package
+    needs: build-and-package
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download distribution artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: viewer-distribution-${{ github.run_id }}
+          path: test-dist/
+
+      - name: Extract package and verify contents
+        run: |
+          set -euo pipefail
+          ARCHIVE="$(ls test-dist/chess-game-viewer-*.zip 2>/dev/null | head -n1 || true)"
+          if [ -n "$ARCHIVE" ]; then
+            unzip -q "$ARCHIVE" -d extracted
+          else
+            ARCHIVE="$(ls test-dist/chess-game-viewer-*.tar.gz 2>/dev/null | head -n1 || true)"
+            if [ -z "$ARCHIVE" ]; then
+              echo "No distribution archive found"
+              exit 1
+            fi
+            tar -xzf "$ARCHIVE" -C extracted
+          fi
+
+          PKG_DIR="$(find extracted -maxdepth 1 -type d -name 'chess-game-viewer-*' | head -n1)"
+          test -n "$PKG_DIR"
+
+          test -f "$PKG_DIR/index.html"
+          test -f "$PKG_DIR/pkg/chess_engine.js"
+          test -f "$PKG_DIR/pkg/chess_engine_bg.wasm"
+          test -f "$PKG_DIR/start-server.sh"
+          test -f "$PKG_DIR/start-server.bat"
+          test -f "$PKG_DIR/start-server.ps1"
+
+      - name: Test server startup
+        run: |
+          set -euo pipefail
+          PKG_DIR="$(find extracted -maxdepth 1 -type d -name 'chess-game-viewer-*' | head -n1)"
+          timeout 8 bash "$PKG_DIR/start-server.sh" >/tmp/server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID || true' EXIT
+          sleep 2
+          curl -fsS http://localhost:8000/index.html >/dev/null
+          kill $SERVER_PID || true
+
+  create-release:
+    name: Create GitHub Release
+    needs: [build-and-package, test-distribution]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: viewer-distribution-${{ github.run_id }}
+          path: release-artifacts/
+
+      - name: Compute next semantic version
+        id: next_version
+        run: |
+          LATEST=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | head -n1)
+          if [ -z "$LATEST" ]; then
+            LATEST="v0.0.0"
+          fi
+          VERSION=${LATEST#v}
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          if ! [[ "$MAJOR" =~ ^[0-9]+$ && "$MINOR" =~ ^[0-9]+$ && "$PATCH" =~ ^[0-9]+$ ]]; then
+            echo "Could not parse version from tag '$LATEST'; defaulting to v0.0.1"
+            MAJOR=0; MINOR=0; PATCH=0
+          fi
+          NEW_PATCH=$((PATCH + 1))
+          NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
+          NEW_TAG="v${NEW_VERSION}"
+          echo "previous_tag=$LATEST" >> "$GITHUB_OUTPUT"
+          echo "tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build release notes from commit history
+        id: release_notes
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          PREV_TAG="${{ steps.next_version.outputs.previous_tag }}"
+          if git rev-parse "$PREV_TAG" >/dev/null 2>&1; then
+            RANGE="${PREV_TAG}..HEAD"
+            CHANGE_SCOPE="Changes since ${PREV_TAG}."
+          else
+            FIRST_COMMIT="$(git rev-list --max-parents=0 HEAD | tail -n1)"
+            RANGE="${FIRST_COMMIT}..HEAD"
+            CHANGE_SCOPE="Changes since initial commit."
+          fi
+
+          mapfile -t COMMITS < <(git log --no-merges --pretty=format:'%s' "$RANGE")
+
+          FEATURES=()
+          FIXES=()
+          OTHER=()
+
+          for SUBJECT in "${COMMITS[@]}"; do
+            LOWER_SUBJECT="$(echo "$SUBJECT" | tr '[:upper:]' '[:lower:]')"
+            if [[ "$LOWER_SUBJECT" =~ ^feat(\(.+\))?: ]]; then
+              FEATURES+=("$SUBJECT")
+            elif [[ "$LOWER_SUBJECT" =~ ^fix(\(.+\))?: ]] || [[ "$LOWER_SUBJECT" =~ ^bugfix(\(.+\))?: ]]; then
+              FIXES+=("$SUBJECT")
+            else
+              OTHER+=("$SUBJECT")
+            fi
+          done
+
+          {
+            echo "body<<EOF"
+            echo "## Chess Game Viewer ${{ steps.next_version.outputs.version }}"
+            echo
+            echo "$CHANGE_SCOPE"
+            echo
+            echo "### Features"
+            if [ ${#FEATURES[@]} -eq 0 ]; then
+              echo "- No feature commits were identified in this range."
+            else
+              for ITEM in "${FEATURES[@]}"; do
+                echo "- $ITEM"
+              done
+            fi
+            echo
+            echo "### Bug Fixes"
+            if [ ${#FIXES[@]} -eq 0 ]; then
+              echo "- No bug-fix commits were identified in this range."
+            else
+              for ITEM in "${FIXES[@]}"; do
+                echo "- $ITEM"
+              done
+            fi
+            echo
+            echo "### Other Changes"
+            if [ ${#OTHER[@]} -eq 0 ]; then
+              echo "- No additional commits in this range."
+            else
+              for ITEM in "${OTHER[@]}"; do
+                echo "- $ITEM"
+              done
+            fi
+            echo
+            echo "Download and extract the package, run the included start script, then open http://localhost:8000 in your browser."
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Rename release archives to semantic version
+        id: normalize_assets
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.next_version.outputs.version }}"
+
+          shopt -s nullglob
+          ZIP_FILES=(release-artifacts/chess-game-viewer-*.zip)
+          TGZ_FILES=(release-artifacts/chess-game-viewer-*.tar.gz)
+          shopt -u nullglob
+
+          if [ ${#ZIP_FILES[@]} -eq 0 ] && [ ${#TGZ_FILES[@]} -eq 0 ]; then
+            echo "No release archives found to rename" >&2
+            exit 1
+          fi
+
+          if [ ${#ZIP_FILES[@]} -gt 0 ]; then
+            mv "${ZIP_FILES[0]}" "release-artifacts/chess-game-viewer-${VERSION}.zip"
+          fi
+
+          if [ ${#TGZ_FILES[@]} -gt 0 ]; then
+            mv "${TGZ_FILES[0]}" "release-artifacts/chess-game-viewer-${VERSION}.tar.gz"
+          fi
+
+          {
+            echo "files<<EOF"
+            [ -f "release-artifacts/chess-game-viewer-${VERSION}.zip" ] && echo "release-artifacts/chess-game-viewer-${VERSION}.zip"
+            [ -f "release-artifacts/chess-game-viewer-${VERSION}.tar.gz" ] && echo "release-artifacts/chess-game-viewer-${VERSION}.tar.gz"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          ls -la release-artifacts/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.next_version.outputs.tag }}
+          name: Chess Game Viewer ${{ steps.next_version.outputs.version }}
+          body: ${{ steps.release_notes.outputs.body }}
+          files: ${{ steps.normalize_assets.outputs.files }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  nightly-release:
+    name: Create Nightly Release
+    needs: [build-and-package, test-distribution]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.release_type == 'nightly'
+
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: viewer-distribution-${{ github.run_id }}
+          path: nightly-artifacts/
+
+      - name: Get current date
+        id: get_date
+        run: |
+          DATE=$(date +%Y%m%d)
+          echo "date=$DATE" >> "$GITHUB_OUTPUT"
+
+      - name: Create Nightly Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nightly
+          name: Chess Game Viewer Nightly ${{ steps.get_date.outputs.date }}
+          body: |
+            Latest nightly build of the Chess Game Viewer (WASM edition).
+          files: |
+            nightly-artifacts/chess-game-viewer-*.zip
+            nightly-artifacts/chess-game-viewer-*.tar.gz
+          prerelease: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chess AI Simulator v2 · WASM</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Inter', 'Segoe UI', Tahoma, sans-serif; 
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%); 
+            min-height: 100vh; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center;
+            padding: 20px;
+            color: #f8fafc;
+        }
+        h1 { 
+            margin-bottom: 20px; 
+            font-size: 2.5rem;
+            text-shadow: 0 4px 12px rgba(0,0,0,0.5); 
+            background: linear-gradient(to right, #60a5fa, #c084fc);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .container {
+            display: flex;
+            gap: 40px;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .game-panel { 
+            background: rgba(30, 41, 59, 0.7); 
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 30px; 
+            border-radius: 16px; 
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .info-panel {
+            background: rgba(30, 41, 59, 0.7); 
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 25px; 
+            border-radius: 16px; 
+            max-width: 300px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+        }
+        .info-panel h3 { margin-bottom: 15px; color: #94a3b8; text-transform: uppercase; font-size: 0.9rem; letter-spacing: 1px; }
+        
+        #board { 
+            display: grid; 
+            grid-template-columns: repeat(8, min(10vw, 65px)); 
+            grid-template-rows: repeat(8, min(10vw, 65px)); 
+            border: 4px solid #0f172a; 
+            border-radius: 4px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        .square { 
+            width: 100%; 
+            height: 100%; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-size: min(6vw, 42px); 
+            cursor: pointer; 
+            transition: all 0.2s ease;
+            user-select: none;
+            position: relative;
+        }
+        .square.light { background: #f1f5f9; color: #0f172a; }
+        .square.dark { background: #64748b; color: #f8fafc; }
+        .square.selected { background: #fbbf24 !important; }
+        .square.last-move { background: rgba(52, 211, 153, 0.5) !important; }
+        .square.valid-move::after {
+            content: '';
+            position: absolute;
+            width: 25%;
+            height: 25%;
+            background: rgba(0, 0, 0, 0.25);
+            border-radius: 50%;
+        }
+        .square.valid-capture::after {
+            content: '';
+            position: absolute;
+            width: 90%;
+            height: 90%;
+            border: 5px solid rgba(0, 0, 0, 0.2);
+            border-radius: 50%;
+            background: transparent;
+        }
+        .piece {
+            line-height: min(6vw, 42px);
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+        }
+        .piece.w {
+            color: #ffffff;
+            text-shadow: 0 0 2px #000, 0 0 4px #000;
+        }
+        .piece.b {
+            color: #111111;
+            text-shadow: 0 0 2px #fff, 0 0 4px #aaa;
+        }
+        #status-container {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        #status { 
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+        .ai-thinking { 
+            color: #fbbf24;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
+        }
+        
+        .badge {
+            background: #3b82f6;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+        
+        .history {
+            height: 200px;
+            overflow-y: auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-auto-rows: min-content;
+            gap: 8px;
+            margin-top: 15px;
+            font-family: monospace;
+            font-size: 1.1rem;
+        }
+        .history span { padding: 4px 8px; border-radius: 4px; background: rgba(255,255,255,0.05); }
+        .history span.white-move { color: #f8fafc; }
+        .history span.black-move { color: #94a3b8; }
+        
+        .history::-webkit-scrollbar { width: 6px; }
+        .history::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        
+        .feature-list { list-style: none; margin-top: 15px; }
+        .feature-list li { margin-bottom: 8px; color: #cbd5e1; font-size: 0.95rem; display: flex; align-items: center;}
+        .feature-list li::before { content: '✓'; color: #10b981; margin-right: 8px; font-weight: bold; }
+
+        .model-selector {
+            margin-top: 28px;
+            border-top: 1px solid rgba(255,255,255,0.08);
+            padding-top: 20px;
+        }
+        .model-selector h3 { margin-bottom: 14px; color: #94a3b8; text-transform: uppercase; font-size: 0.9rem; letter-spacing: 1px; }
+        .engine-toggle {
+            display: flex;
+            background: rgba(15,23,42,0.6);
+            border-radius: 8px;
+            padding: 4px;
+            margin-bottom: 14px;
+            gap: 4px;
+        }
+        .engine-toggle button {
+            flex: 1; padding: 7px 4px; border: none; border-radius: 6px; cursor: pointer;
+            font-size: 0.78rem; font-weight: 600; font-family: 'Inter', sans-serif;
+            background: transparent; color: #64748b; transition: all 0.2s;
+        }
+        .engine-toggle button.active {
+            background: #3b82f6; color: #fff;
+            box-shadow: 0 2px 8px rgba(59,130,246,0.4);
+        }
+        .llm-config { display: none; flex-direction: column; gap: 10px; }
+        .llm-config.visible { display: flex; }
+        .llm-config label { font-size: 0.8rem; color: #94a3b8; margin-bottom: 2px; }
+        .llm-config select, .llm-config input {
+            background: rgba(15,23,42,0.8);
+            border: 1px solid rgba(255,255,255,0.12);
+            color: #f8fafc;
+            border-radius: 6px;
+            padding: 8px 10px;
+            font-size: 0.9rem;
+            font-family: 'Inter', sans-serif;
+            width: 100%;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .llm-config select:focus, .llm-config input:focus { border-color: #3b82f6; }
+        .llm-config input[type=password] { font-family: monospace; letter-spacing: 2px; }
+        .llm-status {
+            font-size: 0.78rem; padding: 6px 10px; border-radius: 6px;
+            background: rgba(15,23,42,0.5); color: #64748b;
+            display: flex; align-items: center; gap: 6px;
+        }
+        .llm-status .dot {
+            width: 7px; height: 7px; border-radius: 50%;
+            background: #475569; flex-shrink: 0;
+        }
+        .llm-status.ready .dot { background: #10b981; }
+        .llm-status.ready { color: #10b981; }
+        .llm-status.error .dot { background: #ef4444; }
+        .llm-status.error { color: #ef4444; }
+        
+        button.reset {
+            background: #ef4444; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: bold; font-family: 'Inter', sans-serif;
+            margin-top: 20px; width: 100%; transition: background 0.2s;
+        }
+        button.reset:hover { background: #dc2626; }
+        
+        .player-info {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 10px 0;
+            padding: 10px 20px;
+            background: rgba(15, 23, 42, 0.5);
+            border-radius: 8px;
+            font-weight: bold;
+            color: #94a3b8;
+        }
+        .clock {
+            font-family: monospace;
+            font-size: 1.5rem;
+            background: #0f172a;
+            padding: 5px 15px;
+            border-radius: 6px;
+            color: #f8fafc;
+            border: 2px solid transparent;
+            transition: all 0.2s;
+        }
+        .clock.active {
+            background: #1e293b;
+            color: #fbbf24;
+            border-color: #fbbf24;
+            box-shadow: 0 0 10px rgba(251, 191, 36, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <h1>♜ Advanced Grandmaster AI</h1>
+    
+    <div class="container">
+        <div class="game-panel">
+            <div id="status-container">
+                <div id="status">Initializing WASM Engine…</div>
+                <div class="badge" id="engine-type">WASM + Alpha-Beta</div>
+            </div>
+            
+            <div class="player-info">
+               <span>🤖 Advanced AI (Black)</span>
+               <div class="clock" id="timer-b">10:00.0</div>
+            </div>
+
+            <div id="board"></div>
+
+            <div class="player-info">
+               <span>👤 You (White)</span>
+               <div class="clock active" id="timer-w">10:00.0</div>
+            </div>
+            
+            <button class="reset" onclick="resetGame()">Restart Game</button>
+        </div>
+        
+        <div class="info-panel">
+            <h3>Engine Capabilities</h3>
+            <ul class="feature-list">
+                <li>Full Chess Rules Validated</li>
+                <li>En Passant &amp; Castling</li>
+                <li>Alpha-Beta Pruning</li>
+                <li>Positional Piece-Square Tables</li>
+                <li>Self-Contained WebAssembly</li>
+            </ul>
+
+            <div class="model-selector">
+                <h3>AI Backend</h3>
+                <div class="engine-toggle">
+                    <button id="btn-local" class="active" onclick="setEngine('local')">⚙️ Local Engine</button>
+                    <button id="btn-llm" onclick="setEngine('llm')">🌐 Frontier Model</button>
+                </div>
+                <div class="llm-config" id="llm-config">
+                    <div>
+                        <label for="model-select">Model</label>
+                        <select id="model-select" onchange="onModelChange()">
+                            <optgroup label="Google">
+                                <option value="gemini-2.5-pro-exp-03-25">Gemini 2.5 Pro</option>
+                                <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                            </optgroup>
+                            <optgroup label="Anthropic">
+                                <option value="claude-opus-4-5">Claude Opus 4.5</option>
+                                <option value="claude-sonnet-4-5">Claude Sonnet 4.5</option>
+                            </optgroup>
+                            <optgroup label="OpenAI">
+                                <option value="gpt-4o">GPT-4o</option>
+                                <option value="o3-mini">o3-mini</option>
+                            </optgroup>
+                            <optgroup label="Local">
+                                <option value="local-openai">Local LLM (OpenAI-compatible)</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                    <div id="base-url-row" style="display:none">
+                        <label for="base-url-input">Base URL</label>
+                        <input type="text" id="base-url-input" placeholder="http://open-webui:8080/api" value="http://open-webui:8080/api" oninput="onBaseUrlChange()" />
+                    </div>
+                    <div id="local-model-row" style="display:none">
+                        <label for="local-model-input">Model Name</label>
+                        <input type="text" id="local-model-input" placeholder="e.g. llama3, mistral, gemma3" oninput="onLocalModelChange()" />
+                    </div>
+                    <div>
+                        <label for="api-key-input">API Key</label>
+                        <input type="password" id="api-key-input" placeholder="Paste your API key…" oninput="onApiKeyChange()" />
+                    </div>
+                    <div class="llm-status" id="llm-status">
+                        <span class="dot"></span>
+                        <span id="llm-status-text">Enter an API key to activate</span>
+                    </div>
+                </div>
+            </div>
+
+            <h3 style="margin-top: 28px;">Match History</h3>
+            <div class="history" id="history"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        // ── WASM state ────────────────────────────────────────────────────────
+        let engine = null;        // ChessEngine instance (set after WASM init)
+        let currentBoard = null;  // cached board JSON (set by updateBoard)
+
+        // ── Game state ────────────────────────────────────────────────────────
+        let selectedSquare = null;
+        let validMoves = [];
+        let aiThinking = false;
+        let lastMove = null;
+
+        // ── Engine mode ───────────────────────────────────────────────────────
+        let engineMode = 'local';
+        let llmModel = 'gemini-2.5-pro-exp-03-25';
+        let llmApiKey = '';
+        let llmBaseUrl = 'http://open-webui:8080/api';
+        let llmLocalModelName = '';
+
+        const DEEP_SEARCH_DEPTH = 4;
+
+        // ── Unicode pieces ────────────────────────────────────────────────────
+        const pieceIcons = {
+            'w': { 'k': '♚', 'q': '♛', 'r': '♜', 'b': '♝', 'n': '♞', 'p': '♟' },
+            'b': { 'k': '♚', 'q': '♛', 'r': '♜', 'b': '♝', 'n': '♞', 'p': '♟' }
+        };
+
+        const boardEl   = document.getElementById('board');
+        const statusEl  = document.getElementById('status');
+        const historyEl = document.getElementById('history');
+
+        // ── Clocks ────────────────────────────────────────────────────────────
+        let timeW = 600000;
+        let timeB = 600000;
+        let lastTime = Date.now();
+        let timerInterval = null;
+
+        function formatTime(ms) {
+            if (ms < 0) ms = 0;
+            const mins  = Math.floor(ms / 60000);
+            const secs  = Math.floor((ms % 60000) / 1000);
+            const decis = Math.floor((ms % 1000) / 100);
+            return `${mins}:${secs.toString().padStart(2, '0')}.${decis}`;
+        }
+
+        function updateTimers() {
+            if (!engine || engine.game_over()) return;
+            const now = Date.now();
+            const delta = now - lastTime;
+            lastTime = now;
+
+            if (engine.move_count() > 0 || aiThinking) {
+                if (engine.get_turn() === 'w') {
+                    timeW -= delta;
+                    if (timeW < 0) timeW = 0;
+                } else {
+                    timeB -= delta;
+                    if (timeB < 0) timeB = 0;
+                }
+            }
+
+            document.getElementById('timer-w').textContent = formatTime(timeW);
+            document.getElementById('timer-b').textContent = formatTime(timeB);
+
+            if (timeW <= 0) {
+                statusEl.textContent = 'Time out! Black wins.';
+                clearInterval(timerInterval);
+                syncClocks();
+            } else if (timeB <= 0) {
+                statusEl.textContent = 'Time out! White wins.';
+                clearInterval(timerInterval);
+                syncClocks();
+            }
+        }
+
+        function syncClocks() {
+            if (!engine) return;
+            document.getElementById('timer-w').classList.toggle('active',
+                engine.get_turn() === 'w' && !engine.game_over() && timeW > 0);
+            document.getElementById('timer-b').classList.toggle('active',
+                engine.get_turn() === 'b' && !engine.game_over() && timeB > 0);
+        }
+
+        // ── Board helpers ─────────────────────────────────────────────────────
+        const getXY = (square) => ({
+            col: square.charCodeAt(0) - 97,
+            row: 8 - parseInt(square[1])
+        });
+        const getSquareStr = (row, col) =>
+            String.fromCharCode(97 + col) + (8 - row);
+
+        function getPieceAt(squareStr) {
+            if (!currentBoard) return null;
+            const { row, col } = getXY(squareStr);
+            return currentBoard[row][col];
+        }
+
+        function updateBoard() {
+            if (!engine) return;
+            currentBoard = JSON.parse(engine.get_board());
+            boardEl.innerHTML = '';
+
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    const squareStr = getSquareStr(row, col);
+                    const piece = currentBoard[row][col];
+
+                    const div = document.createElement('div');
+                    div.className = `square ${(row + col) % 2 === 0 ? 'light' : 'dark'}`;
+                    div.dataset.sq = squareStr;
+
+                    if (piece) {
+                        const span = document.createElement('span');
+                        span.className = `piece ${piece.color}`;
+                        span.textContent = pieceIcons[piece.color][piece.type];
+                        div.appendChild(span);
+                    }
+
+                    if (selectedSquare === squareStr) div.classList.add('selected');
+                    if (lastMove && (lastMove.from === squareStr || lastMove.to === squareStr))
+                        div.classList.add('last-move');
+
+                    const moveMatch = validMoves.find(m => m.to === squareStr);
+                    if (moveMatch) {
+                        if (piece || moveMatch.flags.includes('e')) {
+                            div.classList.add('valid-capture');
+                        } else {
+                            div.classList.add('valid-move');
+                        }
+                    }
+
+                    div.onclick = () => onSquareClick(squareStr);
+                    boardEl.appendChild(div);
+                }
+            }
+        }
+
+        // ── Square click handler ──────────────────────────────────────────────
+        function onSquareClick(square) {
+            if (!engine || aiThinking || engine.game_over()) return;
+
+            if (selectedSquare) {
+                const moveMatch = validMoves.find(m => m.to === square);
+                if (moveMatch) {
+                    const resultStr = engine.make_move(selectedSquare, square, 'q');
+                    if (resultStr) {
+                        const result = JSON.parse(resultStr);
+                        selectedSquare = null;
+                        validMoves = [];
+                        lastMove = { from: result.from, to: result.to };
+                        renderHistory(result, true);
+                        updateBoard();
+                        checkGameOver();
+                        syncClocks();
+                        if (!engine.game_over() && timeW > 0 && timeB > 0) {
+                            triggerAI();
+                        }
+                        return;
+                    }
+                }
+            }
+
+            const piece = getPieceAt(square);
+            if (piece && piece.color === engine.get_turn()) {
+                selectedSquare = square;
+                validMoves = JSON.parse(engine.legal_moves_for(square));
+                updateBoard();
+            } else {
+                selectedSquare = null;
+                validMoves = [];
+                updateBoard();
+            }
+        }
+
+        // ── AI trigger ────────────────────────────────────────────────────────
+        function triggerAI() {
+            aiThinking = true;
+            const label = engineMode === 'llm' ? getModelLabel() : 'Engine';
+            statusEl.innerHTML = `<span class="ai-thinking">${label} is deliberating…</span>`;
+
+            if (engineMode === 'llm' && llmApiKey) {
+                triggerLLMAI();
+            } else {
+                if (engineMode === 'llm' && !llmApiKey) {
+                    document.getElementById('llm-status').className = 'llm-status error';
+                    document.getElementById('llm-status-text').textContent =
+                        'No API key — using local engine';
+                }
+                // Run WASM search after a short yield so the "thinking" label renders
+                setTimeout(() => {
+                    const san = engine.best_move(DEEP_SEARCH_DEPTH);
+                    aiThinking = false;
+                    if (san) {
+                        applyAIMove(san);
+                    } else {
+                        statusEl.textContent = 'AI calculation failed!';
+                    }
+                }, 10);
+            }
+        }
+
+        function applyAIMove(san) {
+            const resultStr = engine.make_san_move(san);
+            if (resultStr) {
+                const result = JSON.parse(resultStr);
+                lastMove = { from: result.from, to: result.to };
+                renderHistory(result, false);
+                updateBoard();
+                checkGameOver();
+                syncClocks();
+            } else {
+                statusEl.textContent = 'AI calculation failed!';
+            }
+        }
+
+        // ── Game-over check ───────────────────────────────────────────────────
+        function checkGameOver() {
+            if (!engine) return;
+            if (engine.game_over()) {
+                if (engine.in_checkmate()) {
+                    statusEl.textContent =
+                        `Checkmate! ${engine.get_turn() === 'w' ? 'Black' : 'White'} wins.`;
+                } else if (engine.in_draw()) {
+                    statusEl.textContent = 'Draw!';
+                } else if (engine.in_stalemate()) {
+                    statusEl.textContent = 'Stalemate!';
+                }
+            } else if (engine.in_check()) {
+                statusEl.innerHTML =
+                    `<span style="color:#ef4444">Check!</span> ${engine.get_turn() === 'w' ? 'Your' : 'AI'} turn`;
+            } else {
+                statusEl.textContent = `${engine.get_turn() === 'w' ? 'Your' : 'AI'} turn`;
+            }
+        }
+
+        function renderHistory(move, isWhite) {
+            const span = document.createElement('span');
+            span.className = isWhite ? 'white-move' : 'black-move';
+            span.textContent = move.san;
+            historyEl.appendChild(span);
+            historyEl.scrollTop = historyEl.scrollHeight;
+        }
+
+        // ── Reset ─────────────────────────────────────────────────────────────
+        function resetGame() {
+            if (!engine) return;
+            engine.reset();
+            selectedSquare = null;
+            validMoves = [];
+            lastMove = null;
+            aiThinking = false;
+            historyEl.innerHTML = '';
+            updateBoard();
+            statusEl.textContent = 'Your turn (White)';
+
+            clearInterval(timerInterval);
+            timeW = 600000;
+            timeB = 600000;
+            lastTime = Date.now();
+            timerInterval = setInterval(updateTimers, 100);
+            document.getElementById('timer-w').textContent = formatTime(timeW);
+            document.getElementById('timer-b').textContent = formatTime(timeB);
+            syncClocks();
+        }
+
+        // ── Engine mode toggles ───────────────────────────────────────────────
+        function setEngine(mode) {
+            engineMode = mode;
+            document.getElementById('btn-local').classList.toggle('active', mode === 'local');
+            document.getElementById('btn-llm').classList.toggle('active', mode === 'llm');
+            document.getElementById('llm-config').classList.toggle('visible', mode === 'llm');
+            document.getElementById('engine-type').textContent =
+                mode === 'local' ? 'WASM + Alpha-Beta' : `🌐 ${getModelLabel()}`;
+        }
+
+        function getModelLabel() {
+            if (llmModel === 'local-openai')
+                return llmLocalModelName ? `Local: ${llmLocalModelName}` : 'Local LLM';
+            return document.getElementById('model-select').selectedOptions[0]?.text || llmModel;
+        }
+
+        function isLocalModel() { return llmModel === 'local-openai'; }
+
+        function onModelChange() {
+            llmModel = document.getElementById('model-select').value;
+            const isLocal = isLocalModel();
+            document.getElementById('base-url-row').style.display  = isLocal ? 'block' : 'none';
+            document.getElementById('local-model-row').style.display = isLocal ? 'block' : 'none';
+            document.getElementById('engine-type').textContent = `🌐 ${getModelLabel()}`;
+            onApiKeyChange();
+        }
+
+        function onBaseUrlChange() {
+            llmBaseUrl = document.getElementById('base-url-input').value.trim()
+                || 'http://open-webui:8080/api';
+        }
+
+        function onLocalModelChange() {
+            llmLocalModelName = document.getElementById('local-model-input').value.trim();
+            document.getElementById('engine-type').textContent = `🌐 ${getModelLabel()}`;
+            onApiKeyChange();
+        }
+
+        function onApiKeyChange() {
+            llmApiKey = document.getElementById('api-key-input').value.trim();
+            const statusEl2 = document.getElementById('llm-status');
+            const textEl   = document.getElementById('llm-status-text');
+            const ready    = llmApiKey && (!isLocalModel() || llmLocalModelName);
+            if (!ready) {
+                statusEl2.className = 'llm-status';
+                textEl.textContent  = isLocalModel() && llmApiKey
+                    ? 'Enter a model name to activate'
+                    : 'Enter an API key to activate';
+            } else {
+                statusEl2.className = 'llm-status ready';
+                textEl.textContent  = `Ready — ${getModelLabel()}`;
+            }
+        }
+
+        // ── LLM integration ───────────────────────────────────────────────────
+        function buildChessPrompt() {
+            const fen = engine.get_fen();
+            const legalMoves  = JSON.parse(engine.legal_moves_san());
+            const historyArr  = JSON.parse(engine.get_san_history());
+            const history     = historyArr.slice(-10).join(' ');
+            return `You are a grandmaster chess AI. Analyze the position and choose the single best legal move for Black.
+
+FEN: ${fen}
+Recent moves: ${history || 'none'}
+Legal moves available: ${legalMoves.join(', ')}
+
+Rules:
+- You MUST choose EXACTLY ONE move from the legal moves list above.
+- Respond with ONLY the move in algebraic notation (e.g. e5, Nf6, O-O) — nothing else.
+- Do not explain your reasoning. Just output the move.`;
+        }
+
+        async function triggerLLMAI() {
+            const provider = getProvider(llmModel);
+            const prompt = buildChessPrompt();
+            let bestMove = null;
+
+            try {
+                if (provider === 'google') {
+                    bestMove = await callGemini(prompt);
+                } else if (provider === 'anthropic') {
+                    bestMove = await callClaude(prompt);
+                } else if (provider === 'local') {
+                    bestMove = await callOpenAI(prompt, llmBaseUrl, llmLocalModelName);
+                } else {
+                    bestMove = await callOpenAI(prompt);
+                }
+            } catch (err) {
+                console.error('LLM error:', err);
+                document.getElementById('llm-status').className = 'llm-status error';
+                document.getElementById('llm-status-text').textContent =
+                    'API error — falling back to local engine';
+                fallbackToWasm();
+                return;
+            }
+
+            const legalMoves = JSON.parse(engine.legal_moves_san());
+            const clean = bestMove ? bestMove.replace(/[+#!?]/g, '') : '';
+            const matched = legalMoves.find(m => m === bestMove || m.replace(/[+#]/g, '') === clean);
+
+            if (matched) {
+                const resultStr = engine.make_san_move(matched);
+                if (resultStr) {
+                    aiThinking = false;
+                    const result = JSON.parse(resultStr);
+                    lastMove = { from: result.from, to: result.to };
+                    renderHistory(result, false);
+                    updateBoard();
+                    checkGameOver();
+                    syncClocks();
+                    document.getElementById('llm-status').className = 'llm-status ready';
+                    document.getElementById('llm-status-text').textContent =
+                        `Played: ${result.san} — ${getModelLabel()}`;
+                    return;
+                }
+            }
+
+            console.warn('LLM returned invalid move:', bestMove, '— falling back');
+            document.getElementById('llm-status').className = 'llm-status error';
+            document.getElementById('llm-status-text').textContent =
+                `Invalid move "${bestMove}" — using local engine`;
+            fallbackToWasm();
+        }
+
+        function fallbackToWasm() {
+            setTimeout(() => {
+                const san = engine.best_move(DEEP_SEARCH_DEPTH);
+                aiThinking = false;
+                if (san) {
+                    applyAIMove(san);
+                } else {
+                    statusEl.textContent = 'AI calculation failed!';
+                }
+            }, 10);
+        }
+
+        function getProvider(model) {
+            if (model.startsWith('gemini'))    return 'google';
+            if (model.startsWith('claude'))    return 'anthropic';
+            if (model === 'local-openai')      return 'local';
+            return 'openai';
+        }
+
+        async function callGemini(prompt) {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${llmModel}:generateContent?key=${llmApiKey}`;
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: { temperature: 0.3, maxOutputTokens: 32 }
+                })
+            });
+            if (!res.ok) throw new Error(`Gemini API ${res.status}: ${await res.text()}`);
+            const data = await res.json();
+            return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+        }
+
+        async function callClaude(prompt) {
+            const res = await fetch('https://api.anthropic.com/v1/messages', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': llmApiKey,
+                    'anthropic-version': '2023-06-01',
+                    'anthropic-dangerous-direct-browser-access': 'true'
+                },
+                body: JSON.stringify({
+                    model: llmModel,
+                    max_tokens: 32,
+                    messages: [{ role: 'user', content: prompt }]
+                })
+            });
+            if (!res.ok) throw new Error(`Claude API ${res.status}: ${await res.text()}`);
+            const data = await res.json();
+            return data.content?.[0]?.text?.trim();
+        }
+
+        async function callOpenAI(prompt, baseUrl = 'https://api.openai.com', modelOverride = null) {
+            const base     = baseUrl.replace(/\/$/, '').replace(/\/v1$/, '');
+            const endpoint = `${base}/v1/chat/completions`;
+            const modelName = modelOverride || llmModel;
+            const res = await fetch(endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${llmApiKey}`
+                },
+                body: JSON.stringify({
+                    model: modelName,
+                    messages: [{ role: 'user', content: prompt }],
+                    max_tokens: 64,
+                    temperature: 0.3
+                })
+            });
+            if (!res.ok) throw new Error(`OpenAI-compat API ${res.status}: ${await res.text()}`);
+            const data = await res.json();
+            return data.choices?.[0]?.message?.content?.trim();
+        }
+
+        // ── Expose to inline onclick handlers ────────────────────────────────
+        window.resetGame      = resetGame;
+        window.setEngine      = setEngine;
+        window.onModelChange  = onModelChange;
+        window.onBaseUrlChange  = onBaseUrlChange;
+        window.onLocalModelChange = onLocalModelChange;
+        window.onApiKeyChange = onApiKeyChange;
+
+        // ── Bootstrap: load WASM then start game ─────────────────────────────
+        (async () => {
+            try {
+                const mod = await import('./pkg/chess_engine.js');
+                await mod.default();          // run WASM module initialiser
+                engine = new mod.ChessEngine();
+                resetGame();
+            } catch (err) {
+                console.error('WASM init error:', err);
+                statusEl.textContent = '⚠ Failed to load WASM engine: ' + err;
+            }
+        })();
+    </script>
+</body>
+</html>
