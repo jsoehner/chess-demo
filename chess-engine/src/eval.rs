@@ -14,6 +14,27 @@ pub fn piece_value(role: Role) -> i32 {
     }
 }
 
+// ── King safety values (penalize exposed kings) ────────────────────────────────
+/// Negative = good for king (safe), Positive = bad for king (dangerous)
+const KING_SAFE: [[i32; 8]; 8] = [
+    // Rank 8 (row 0)
+    [-20, -30, -30, -40, -40, -30, -30, -20],
+    // Rank 7
+    [-10, -20, -20, -25, -25, -20, -20, -10],
+    // Rank 6
+    [-5, -10, -10, -15, -15, -10, -10, -5],
+    // Rank 5
+    [0, -5, -5, -10, -10, -5, -5, 0],
+    // Rank 4
+    [0, -5, -5, -10, -10, -5, -5, 0],
+    // Rank 3
+    [-5, -5, -5, -5, -5, -5, -5, -5],
+    // Rank 2
+    [-5, -10, -10, -5, -5, -10, -10, -5],
+    // Rank 1 (row 7) 
+    [-20, -30, -30, -40, -40, -30, -30, -20],
+];
+
 // ── Piece-square tables (row 0 = rank 8, row 7 = rank 1) ─────────────────────
 // For white  : table[7 - rank][file]
 // For black  : table[rank][file]  (mirrored – same data, opposite indexing)
@@ -100,8 +121,18 @@ fn positional_value(role: Role, color: Color, sq: Square) -> i32 {
         (Role::Rook,   Color::White) => ROOK_WHITE[row_w][file],
         (Role::Rook,   Color::Black) => ROOK_WHITE[row_b][file],
         (Role::Queen,  _           ) => QUEEN[row_w][file],
-        (Role::King,   Color::White) => KING_WHITE[row_w][file],
-        (Role::King,   Color::Black) => KING_WHITE[row_b][file],
+        (Role::King,   Color::White) => {
+            // Combine positional table with king safety
+            let base = KING_WHITE[row_w][file];
+            let safety = KING_SAFE[row_w][file];
+            base + safety
+        },
+        (Role::King,   Color::Black) => {
+            // Combine positional table with king safety
+            let base = KING_WHITE[row_b][file];
+            let safety = KING_SAFE[row_b][file];
+            base + safety
+        },
     }
 }
 
@@ -109,6 +140,8 @@ fn positional_value(role: Role, color: Color, sq: Square) -> i32 {
 pub fn evaluate<P: Position>(pos: &P) -> i32 {
     let board: &Board = pos.board();
     let mut total: i32 = 0;
+    
+    // Material evaluation
     for sq in Square::ALL {
         if let Some(piece) = board.piece_at(sq) {
             let val = piece_value(piece.role) + positional_value(piece.role, piece.color, sq);
@@ -119,5 +152,7 @@ pub fn evaluate<P: Position>(pos: &P) -> i32 {
             }
         }
     }
-    total
+    
+    // Small bonus for white (slight advantage for first player at equal positions)
+    total + 1
 }

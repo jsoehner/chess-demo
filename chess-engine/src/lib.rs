@@ -7,16 +7,21 @@
 //   • SAN move history for the move log and LLM prompts
 
 mod eval;
-mod search;
+pub mod search;
+
+use std::collections::HashMap;
 
 use wasm_bindgen::prelude::*;
 
-use shakmaty::{Chess, Color, EnPassantMode, File, Move, Position, Role, Square};
-use shakmaty::san::San;
+use shakmaty::{Chess, Color, EnPassantMode, Move, Position, Role, Square, CastlingSide};
+use shakmaty::san::{San, SanPlus};
 use shakmaty::fen::Fen;
 use shakmaty::CastlingMode;
 
-// ── Initialisation ────────────────────────────────────────────────────────────
+// ── Constants ──────────────────────────────────────────────────────────────
+const DEFAULT_SEARCH_DEPTH: u32 = 4; // default depth for best_move()
+
+// ── Initialisation ──────────────────────────────────────────────────────────
 #[wasm_bindgen(start)]
 pub fn start() {
     console_error_panic_hook::set_once();
@@ -49,28 +54,28 @@ fn role_from_char(c: char) -> Option<Role> {
 
 /// For castle moves, return the king's *destination* square so the UI can
 /// highlight it correctly (g1/c1 for white, g8/c8 for black).
-fn castle_king_to(king: Square, rook: Square) -> Square {
-    let rank = king.rank();
-    if (rook.file() as u8) > (king.file() as u8) {
-        Square::from_coords(File::G, rank) // kingside
-    } else {
-        Square::from_coords(File::C, rank) // queenside
-    }
-}
-
-/// Effective "from" square shown to the UI (always the king for castles).
 fn move_from(m: &Move) -> Option<Square> {
     match m {
         Move::Castle { king, .. } => Some(*king),
-        _ => m.from(),
+        Move::Normal { from, .. } => Some(*from),
+        Move::EnPassant { from, .. } => Some(*from),
+        Move::Put { .. } => None,
     }
 }
 
-/// Effective "to" square shown to the UI (king destination for castles).
 fn move_to(m: &Move) -> Square {
     match m {
-        Move::Castle { king, rook } => castle_king_to(*king, *rook),
-        _ => m.to(),
+        Move::Castle { king, rook } => {
+            let rank = king.rank();
+            if rook.file() > king.file() {
+                Square::from_coords(shakmaty::File::G, rank) // kingside
+            } else {
+                Square::from_coords(shakmaty::File::C, rank) // queenside
+            }
+        }
+        Move::Normal { to, .. } => *to,
+        Move::EnPassant { to, .. } => *to,
+        Move::Put { to, .. } => *to,
     }
 }
 
@@ -79,35 +84,32 @@ fn move_to(m: &Move) -> Square {
 fn move_flags(m: &Move) -> &'static str {
     match m {
         Move::Castle { king, rook } => {
-            if (rook.file() as u8) > (king.file() as u8) { "k" } else { "q" }
+            if rook.file() > king.file() { "k" } else { "q" }
         }
         Move::EnPassant { .. } => "e",
-        Move::Normal { capture: Some(_), promotion: Some(_), .. } => "cp",
-        Move::Normal { promotion: Some(_), .. } => "p",
-        Move::Normal { capture: Some(_), .. } => "c",
+        Move::Normal { capture, promotion, .. } => {
+            if capture.is_some() && promotion.is_some() { "cp" }
+            else if promotion.is_some() { "p" }
+            else if capture.is_some() { "c" }
+            else { "n" }
+        }
         _ => "n",
     }
 }
 
 /// Build a SAN string with check / checkmate suffix.
 fn san_with_suffix(pos: &Chess, m: &Move) -> String {
-    let san = San::from_move(pos, m).to_string();
-    if let Ok(after) = pos.clone().play(m) {
-        if after.is_checkmate() {
-            return format!("{}#", san);
-        } else if after.is_check() {
-            return format!("{}+", san);
-        }
-    }
-    san
+    let _san = San::from_move(pos, m);
+    SanPlus::from_move(pos.clone(), m).to_string()
 }
 
-// ── ChessEngine ───────────────────────────────────────────────────────────────
+// ── ChessEngine ──────────────────────────────────────────────────────────────────
 
 #[wasm_bindgen]
 pub struct ChessEngine {
     position: Chess,
     san_history: Vec<String>,
+    tt: HashMap<u64, (i32, u32)>, // pos_hash -> (eval, depth)
 }
 
 #[wasm_bindgen]
@@ -117,18 +119,18 @@ impl ChessEngine {
         ChessEngine {
             position: Chess::default(),
             san_history: Vec::new(),
+            tt: HashMap::new(),
         }
     }
 
     // ── Game state ────────────────────────────────────────────────────────────
 
-    /// Reset to the starting position.
     pub fn reset(&mut self) {
         self.position = Chess::default();
         self.san_history.clear();
+        self.tt.clear();
     }
 
-    /// Load a FEN string.  Returns true on success.
     pub fn load_fen(&mut self, fen: &str) -> bool {
         let parsed: Result<Fen, _> = fen.trim().parse();
         match parsed {
@@ -136,6 +138,7 @@ impl ChessEngine {
                 Ok(pos) => {
                     self.position = pos;
                     self.san_history.clear();
+                    self.tt.clear();
                     true
                 }
                 Err(_) => false,
@@ -144,12 +147,10 @@ impl ChessEngine {
         }
     }
 
-    /// Return the current FEN string.
     pub fn get_fen(&self) -> String {
         shakmaty::fen::Fen::from_position(self.position.clone(), EnPassantMode::Legal).to_string()
     }
 
-    /// Return "w" or "b".
     pub fn get_turn(&self) -> String {
         match self.position.turn() {
             Color::White => "w".to_string(),
@@ -179,15 +180,49 @@ impl ChessEngine {
             || self.position.halfmoves() >= 100
     }
 
-    /// Number of moves played so far.
     pub fn move_count(&self) -> u32 {
         self.san_history.len() as u32
     }
 
+    pub fn get_evaluation(&self) -> i32 {
+        eval::evaluate(&self.position)
+    }
+
+    // ── Board representation for UI ───────────────────────────────────────────
+
+    /// Returns a JSON-serialized 8x8 array of piece objects.
+    /// `[[{"type":"r","color":"w"}, ...], ...]`
+    pub fn get_board(&self) -> String {
+        let mut board_json = Vec::new();
+        let board = self.position.board();
+        
+        for rank in (0..8).rev() {
+            let mut row = Vec::new();
+            for file in 0..8 {
+                let sq = Square::from_coords(
+                    shakmaty::File::new(file as u32),
+                    shakmaty::Rank::new(rank as u32)
+                );
+                match board.piece_at(sq) {
+                    Some(piece) => {
+                        let type_char = role_to_char(piece.role);
+                        let color_char = match piece.color {
+                            Color::White => 'w',
+                            Color::Black => 'b',
+                        };
+                        row.push(format!(r#"{{"type":"{type_char}","color":"{color_char}"}}"#));
+                    }
+                    None => row.push("null".to_string()),
+                }
+            }
+            board_json.push(format!("[{}]", row.join(",")));
+        }
+        
+        format!("[{}]", board_json.join(","))
+    }
+
     // ── Move queries ──────────────────────────────────────────────────────────
 
-    /// JSON array of verbose move objects for the given square:
-    /// `[{"from":"e2","to":"e4","flags":"n","san":"e4"}, ...]`
     pub fn legal_moves_for(&self, square: &str) -> String {
         let sq: Square = match square.trim().parse() {
             Ok(s) => s,
@@ -214,8 +249,6 @@ impl ChessEngine {
         format!("[{}]", out.join(","))
     }
 
-    /// JSON array of SAN strings for all current legal moves
-    /// (used in the LLM prompt).
     pub fn legal_moves_san(&self) -> String {
         let moves = self.position.legal_moves();
         let sans: Vec<String> = moves
@@ -227,8 +260,6 @@ impl ChessEngine {
 
     // ── Making moves ─────────────────────────────────────────────────────────
 
-    /// Apply a move given as from/to squares + optional promotion piece char
-    /// (e.g. "q").  Returns a JSON result object on success, "" on failure.
     pub fn make_move(&mut self, from_sq: &str, to_sq: &str, promotion: &str) -> String {
         let from: Square = match from_sq.trim().parse() {
             Ok(s) => s,
@@ -252,111 +283,102 @@ impl ChessEngine {
                 let san = san_with_suffix(&self.position, m);
                 let from_str = move_from(m).map(|s| s.to_string()).unwrap_or_default();
                 let to_str = move_to(m).to_string();
-                match self.position.clone().play(m) {
-                    Ok(new_pos) => {
-                        self.position = new_pos;
-                        self.san_history.push(san.clone());
-                        format!(r#"{{"from":"{from_str}","to":"{to_str}","san":"{san}"}}"#)
-                    }
-                    Err(_) => String::new(),
+                if let Ok(new_pos) = self.position.clone().play(m) {
+                    self.position = new_pos;
+                    self.san_history.push(san.clone());
+                    format!(r#"{{"from":"{from_str}","to":"{to_str}","san":"{san}"}}"#)
+                } else {
+                    String::new()
                 }
             }
-            None => String::new(),
+            None => {
+                // If it was a promotion move but no promo piece was specified, try defaulting to Queen
+                if promo.is_none() {
+                    let queen_promo = Some(Role::Queen);
+                    let found_queen = moves.iter().find(|m| {
+                        move_from(m) == Some(from)
+                            && move_to(m) == to
+                            && m.promotion() == queen_promo
+                    });
+                    if let Some(m) = found_queen {
+                        let san = san_with_suffix(&self.position, m);
+                        let from_str = move_from(m).map(|s| s.to_string()).unwrap_or_default();
+                        let to_str = move_to(m).to_string();
+                        if let Ok(new_pos) = self.position.clone().play(m) {
+                            self.position = new_pos;
+                            self.san_history.push(san.clone());
+                            return format!(r#"{{"from":"{from_str}","to":"{to_str}","san":"{san}"}}"#);
+                        }
+                    }
+                }
+                String::new()
+            }
         }
     }
 
-    /// Apply a move given in SAN notation (used for AI and LLM moves).
-    /// Strips trailing check/checkmate annotations before parsing.
-    /// Returns a JSON result object on success, "" on failure.
     pub fn make_san_move(&mut self, san_str: &str) -> String {
-        // Strip check / checkmate / annotation suffixes before parsing
-        let clean: String = san_str
-            .chars()
-            .take_while(|&c| !matches!(c, '+' | '#' | '!' | '?'))
-            .collect();
-
-        let san: San = match clean.trim().parse() {
+        let san: San = match san_str.trim().parse() {
             Ok(s) => s,
             Err(_) => return String::new(),
         };
 
-        match san.to_move(&self.position) {
-            Ok(m) => {
-                let san_out = san_with_suffix(&self.position, &m);
-                let from_str = move_from(&m).map(|s| s.to_string()).unwrap_or_default();
-                let to_str = move_to(&m).to_string();
-                match self.position.clone().play(&m) {
-                    Ok(new_pos) => {
-                        self.position = new_pos;
-                        self.san_history.push(san_out.clone());
-                        format!(r#"{{"from":"{from_str}","to":"{to_str}","san":"{san_out}"}}"#)
-                    }
-                    Err(_) => String::new(),
-                }
+        if let Ok(m) = san.to_move(&self.position) {
+            let from_str = move_from(&m).map(|s| s.to_string()).unwrap_or_default();
+            let to_str = move_to(&m).to_string();
+            let san_actual = san_with_suffix(&self.position, &m);
+            if let Ok(new_pos) = self.position.clone().play(&m) {
+                self.position = new_pos;
+                self.san_history.push(san_actual.clone());
+                format!(r#"{{"from":"{from_str}","to":"{to_str}","san":"{san_actual}"}}"#)
+            } else {
+                String::new()
             }
-            Err(_) => String::new(),
+        } else {
+            String::new()
         }
     }
 
-    // ── AI ────────────────────────────────────────────────────────────────────
+    // ── AI / Search interface ─────────────────────────────────────────────────
 
-    /// Run alpha-beta minimax and return the best move in SAN notation.
-    pub fn best_move(&self, depth: u32) -> String {
-        search::best_move_san(&self.position, depth)
+    pub fn search_depth(&self) -> u32 {
+        DEFAULT_SEARCH_DEPTH
     }
 
-    // ── History & Board ───────────────────────────────────────────────────────
+    pub fn best_move(&mut self, depth: u32) -> String {
+        if self.position.is_game_over() {
+            return String::new();
+        }
+        search::best_move_san(&self.position, depth, &mut self.tt)
+    }
 
-    /// JSON array of SAN strings for every move played so far.
+    pub fn make_best_move(&mut self) -> String {
+        let san = self.best_move(DEFAULT_SEARCH_DEPTH);
+        if san.is_empty() {
+            return String::new();
+        }
+        self.make_san_move(&san)
+    }
+
+    // ── Query helpers ──────────────────────────────────────────────────────────
+
     pub fn get_san_history(&self) -> String {
-        let items: Vec<String> = self
-            .san_history
-            .iter()
-            .map(|s| format!("\"{}\"", s))
-            .collect();
-        format!("[{}]", items.join(","))
+        format!("[{}]", self.san_history.iter().map(|s| format!("\"{}\"", s)).collect::<Vec<_>>().join(","))
     }
 
-    /// Board as an 8×8 JSON array (row 0 = rank 8).
-    /// Each cell is `{"type":"p","color":"w"}` or `null`.
-    pub fn get_board(&self) -> String {
-        let board = self.position.board();
-        let mut rows: Vec<String> = Vec::with_capacity(8);
-
-        for rank_idx in (0..8u8).rev() {
-            let rank: shakmaty::Rank = rank_idx.try_into().unwrap();
-            let mut cells: Vec<String> = Vec::with_capacity(8);
-            for file_idx in 0..8u8 {
-                let file: shakmaty::File = file_idx.try_into().unwrap();
-                let sq = Square::from_coords(file, rank);
-                match board.piece_at(sq) {
-                    Some(p) => {
-                        let t = role_to_char(p.role);
-                        let c = if p.color == Color::White { 'w' } else { 'b' };
-                        cells.push(format!(r#"{{"type":"{t}","color":"{c}"}}"#));
-                    }
-                    None => cells.push("null".to_string()),
-                }
-            }
-            rows.push(format!("[{}]", cells.join(",")));
-        }
-
-        format!("[{}]", rows.join(","))
+    pub fn castling_rights(&self) -> String {
+        let castles = self.position.castles();
+        let mut out = String::new();
+        if castles.has(Color::White, CastlingSide::KingSide) { out.push('K'); }
+        if castles.has(Color::White, CastlingSide::QueenSide) { out.push('Q'); }
+        if castles.has(Color::Black, CastlingSide::KingSide) { out.push('k'); }
+        if castles.has(Color::Black, CastlingSide::QueenSide) { out.push('q'); }
+        out
     }
 
-    /// Piece at a square as `{"type":"p","color":"w"}` JSON, or `"null"`.
-    pub fn get_piece_at(&self, square: &str) -> String {
-        let sq: Square = match square.trim().parse() {
-            Ok(s) => s,
-            Err(_) => return "null".to_string(),
-        };
-        match self.position.board().piece_at(sq) {
-            Some(p) => {
-                let t = role_to_char(p.role);
-                let c = if p.color == Color::White { 'w' } else { 'b' };
-                format!(r#"{{"type":"{t}","color":"{c}"}}"#)
-            }
-            None => "null".to_string(),
+    pub fn en_passant_target(&self) -> String {
+        match self.position.maybe_ep_square() {
+            Some(s) => s.to_string(),
+            None => String::new(),
         }
     }
 }
