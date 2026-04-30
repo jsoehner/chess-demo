@@ -219,9 +219,10 @@ python3 -m http.server  # or any HTTP server
 
 ---
 
-## 📋 Version 0.2.0 Changelog
+## 📋 Version 0.3.0 Changelog
 
 ### Added
+- **UI Consistency**: Full feature parity between root and viewer editions.
 - **Transposition Table**: Zobrist-based caching for massive search speedup.
 - **MVV-LVA Move Ordering**: Professional move sorting for better pruning.
 - **Visual Evaluation Bar**: Real-time balance indicator in the UI.
@@ -237,7 +238,7 @@ python3 -m http.server  # or any HTTP server
 
 ## 📸 Preview
 
-![Chess AI v0.2.0 Preview](docs/img/v020_preview.webp)
+![Chess AI v0.3.0 Preview](docs/img/v020_preview.webp)
 
 ---
 

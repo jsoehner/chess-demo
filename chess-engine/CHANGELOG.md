@@ -5,9 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.8.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.0] - 2026-04-29
+## [0.3.0] - 2026-04-30
 
 ### Added
+- **UI Consistency**: Synchronized root UI and viewer UI with the new evaluation bar and polished design.
+- **Version Bump**: Official release of the optimized WASM engine.
+
+## [0.2.0] - 2026-04-29
 - **Transposition Table**: Implemented Zobrist hashing to cache and reuse evaluations, significantly speeding up deep searches.
 - **MVV-LVA Move Ordering**: Implemented "Most Valuable Victim - Least Valuable Aggressor" heuristic for more efficient Alpha-Beta pruning.
 - **Mate Distance Scoring**: AI now prefers the shortest path to checkmate.
