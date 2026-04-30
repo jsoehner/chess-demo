@@ -341,8 +341,8 @@
         button.reset:hover { background: #dc2626; transform: translateY(-2px); box-shadow: 0 15px 30px rgba(239, 68, 68, 0.4); }
         button.reset:active { transform: translateY(0); }
 
-        .ai-thinking { color: #fbbf24; animation: pulse 1.5s infinite; }
-        @keyframes pulse { 0% { opacity: 0.7; } 50% { opacity: 1; } 100% { opacity: 0.7; } }
+        .ai-thinking { color: #fbbf24; animation: pulse 1.5s infinite; font-weight: 700; letter-spacing: 0.5px; }
+        @keyframes pulse { 0% { opacity: 0.6; transform: scale(1); } 50% { opacity: 1; transform: scale(1.02); } 100% { opacity: 0.6; transform: scale(1); } }
 
     </style>
 </head>
@@ -577,8 +577,9 @@
             const evalText = document.getElementById('eval-text');
             const evalBar = document.getElementById('eval-bar');
             
-            // Normalize: 0 is center (50%), +1000 is 100%, -1000 is 0%
-            const percent = Math.max(0, Math.min(100, 50 + (evalScore / 40)));
+            // Normalize: 0 is center (50%), +500 is 100%, -500 is 0%
+            // A 5-pawn advantage should saturate the bar.
+            const percent = Math.max(0, Math.min(100, 50 + (evalScore / 10)));
             evalBar.style.width = `${percent}%`;
             
             const scoreFormatted = (evalScore / 100).toFixed(1);

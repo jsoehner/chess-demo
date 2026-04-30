@@ -17,8 +17,8 @@ pub fn best_move_san(pos: &Chess, depth: u32, tt: &mut HashMap<u64, (i32, u32)>)
     let is_white = pos.turn() == Color::White;
     let mut best_val = if is_white { i32::MIN } else { i32::MAX };
 
-    let alpha = i32::MIN;
-    let beta = i32::MAX;
+    let mut alpha = i32::MIN;
+    let mut beta = i32::MAX;
 
     // Move ordering
     let mut sorted_moves: Vec<Move> = moves.into_iter().collect();
@@ -36,6 +36,7 @@ pub fn best_move_san(pos: &Chess, depth: u32, tt: &mut HashMap<u64, (i32, u32)>)
                 } else if val == best_val {
                     best_moves.push(m);
                 }
+                alpha = alpha.max(best_val);
             } else {
                 if val < best_val {
                     best_val = val;
@@ -44,14 +45,12 @@ pub fn best_move_san(pos: &Chess, depth: u32, tt: &mut HashMap<u64, (i32, u32)>)
                 } else if val == best_val {
                     best_moves.push(m);
                 }
+                beta = beta.min(best_val);
             }
         }
     }
 
     if let Some(m) = best_moves.first() {
-        // If there are multiple equal moves, we could pick one randomly,
-        // but for WASM simplicity we'll just take the first one or use a simple pseudo-randomness.
-        // For now, let's just stick to the first best move found.
         shakmaty::san::SanPlus::from_move(pos.clone(), m).to_string()
     } else {
         String::new()
@@ -63,7 +62,6 @@ fn sort_moves_internal(pos: &Chess, moves: &mut [Move]) {
         let mut score = 0;
         if let Some(capture) = m.capture() {
             // MVV-LVA: Most Valuable Victim - Least Valuable Aggressor
-            // capture is Role
             let victim_val = eval::piece_value(capture);
             let attacker_role = pos.board().piece_at(m.from().unwrap()).map(|p| p.role).unwrap_or(Role::Pawn);
             let attacker_val = eval::piece_value(attacker_role);
@@ -150,13 +148,16 @@ fn quiescence(pos: &Chess, mut alpha: i32, mut beta: i32, maximizing: bool) -> i
     }
 
     let moves = pos.legal_moves();
-    let captures: Vec<Move> = moves.into_iter()
+    let mut captures: Vec<Move> = moves.into_iter()
         .filter(|m| m.is_capture() || m.is_en_passant())
         .collect();
 
     if captures.is_empty() {
         return standby;
     }
+
+    // Sort captures for better pruning
+    sort_moves_internal(pos, &mut captures);
 
     if maximizing {
         let mut best = standby;
@@ -186,3 +187,4 @@ fn quiescence(pos: &Chess, mut alpha: i32, mut beta: i32, maximizing: bool) -> i
         best
     }
 }
+
