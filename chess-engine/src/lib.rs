@@ -20,6 +20,7 @@ use shakmaty::CastlingMode;
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const DEFAULT_SEARCH_DEPTH: u32 = 4; // default depth for best_move()
+const MAX_TT_ENTRIES: usize = 100_000;
 
 // ── Initialisation ──────────────────────────────────────────────────────────
 #[wasm_bindgen(start)]
@@ -347,6 +348,10 @@ impl ChessEngine {
     pub fn best_move(&mut self, depth: u32) -> String {
         if self.position.is_game_over() {
             return String::new();
+        }
+        // Limit TT size to prevent OOM in WASM
+        if self.tt.len() > MAX_TT_ENTRIES {
+            self.tt.clear();
         }
         search::best_move_san(&self.position, depth, &mut self.tt)
     }

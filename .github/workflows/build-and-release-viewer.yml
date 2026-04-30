@@ -1,4 +1,4 @@
-name: Build and Release Chess Game Viewer
+name: Build and Release Grandmaster Chess AI
 
 on:
   push:
@@ -29,7 +29,7 @@ env:
 
 jobs:
   build-and-package:
-    name: Build and Package Viewer
+    name: Build and Package AI
     runs-on: ubuntu-latest
 
     steps:
@@ -57,16 +57,16 @@ jobs:
 
       - name: List generated archives
         run: |
-          ls -la chess-game-viewer-*.zip 2>/dev/null || true
-          ls -la chess-game-viewer-*.tar.gz 2>/dev/null || true
+          ls -la grandmaster-chess-ai-*.zip 2>/dev/null || true
+          ls -la grandmaster-chess-ai-*.tar.gz 2>/dev/null || true
 
       - name: Upload distribution artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: viewer-distribution-${{ github.run_id }}
+          name: ai-distribution-${{ github.run_id }}
           path: |
-            chess-game-viewer-*.zip
-            chess-game-viewer-*.tar.gz
+            grandmaster-chess-ai-*.zip
+            grandmaster-chess-ai-*.tar.gz
           if-no-files-found: error
           retention-days: 30
 
@@ -79,17 +79,17 @@ jobs:
       - name: Download distribution artifacts
         uses: actions/download-artifact@v4
         with:
-          name: viewer-distribution-${{ github.run_id }}
+          name: ai-distribution-${{ github.run_id }}
           path: test-dist/
 
       - name: Extract package and verify contents
         run: |
           set -euo pipefail
-          ARCHIVE="$(ls test-dist/chess-game-viewer-*.zip 2>/dev/null | head -n1 || true)"
+          ARCHIVE="$(ls test-dist/grandmaster-chess-ai-*.zip 2>/dev/null | head -n1 || true)"
           if [ -n "$ARCHIVE" ]; then
             unzip -q "$ARCHIVE" -d extracted
           else
-            ARCHIVE="$(ls test-dist/chess-game-viewer-*.tar.gz 2>/dev/null | head -n1 || true)"
+            ARCHIVE="$(ls test-dist/grandmaster-chess-ai-*.tar.gz 2>/dev/null | head -n1 || true)"
             if [ -z "$ARCHIVE" ]; then
               echo "No distribution archive found"
               exit 1
@@ -97,7 +97,7 @@ jobs:
             tar -xzf "$ARCHIVE" -C extracted
           fi
 
-          PKG_DIR="$(find extracted -maxdepth 1 -type d -name 'chess-game-viewer-*' | head -n1)"
+          PKG_DIR="$(find extracted -maxdepth 1 -type d -name 'grandmaster-chess-ai-*' | head -n1)"
           test -n "$PKG_DIR"
 
           test -f "$PKG_DIR/index.html"
@@ -110,7 +110,7 @@ jobs:
       - name: Test server startup
         run: |
           set -euo pipefail
-          PKG_DIR="$(find extracted -maxdepth 1 -type d -name 'chess-game-viewer-*' | head -n1)"
+          PKG_DIR="$(find extracted -maxdepth 1 -type d -name 'grandmaster-chess-ai-*' | head -n1)"
           timeout 8 bash "$PKG_DIR/start-server.sh" >/tmp/server.log 2>&1 &
           SERVER_PID=$!
           trap 'kill $SERVER_PID || true' EXIT
@@ -133,7 +133,7 @@ jobs:
       - name: Download release artifacts
         uses: actions/download-artifact@v4
         with:
-          name: viewer-distribution-${{ github.run_id }}
+          name: ai-distribution-${{ github.run_id }}
           path: release-artifacts/
 
       - name: Compute next semantic version
@@ -191,7 +191,7 @@ jobs:
 
           {
             echo "body<<EOF"
-            echo "## Chess Game Viewer ${{ steps.next_version.outputs.version }}"
+            echo "## Grandmaster Chess AI ${{ steps.next_version.outputs.version }}"
             echo
             echo "$CHANGE_SCOPE"
             echo
@@ -233,8 +233,8 @@ jobs:
           VERSION="${{ steps.next_version.outputs.version }}"
 
           shopt -s nullglob
-          ZIP_FILES=(release-artifacts/chess-game-viewer-*.zip)
-          TGZ_FILES=(release-artifacts/chess-game-viewer-*.tar.gz)
+          ZIP_FILES=(release-artifacts/grandmaster-chess-ai-*.zip)
+          TGZ_FILES=(release-artifacts/grandmaster-chess-ai-*.tar.gz)
           shopt -u nullglob
 
           if [ ${#ZIP_FILES[@]} -eq 0 ] && [ ${#TGZ_FILES[@]} -eq 0 ]; then
@@ -243,17 +243,17 @@ jobs:
           fi
 
           if [ ${#ZIP_FILES[@]} -gt 0 ]; then
-            mv "${ZIP_FILES[0]}" "release-artifacts/chess-game-viewer-${VERSION}.zip"
+            mv "${ZIP_FILES[0]}" "release-artifacts/grandmaster-chess-ai-${VERSION}.zip"
           fi
 
           if [ ${#TGZ_FILES[@]} -gt 0 ]; then
-            mv "${TGZ_FILES[0]}" "release-artifacts/chess-game-viewer-${VERSION}.tar.gz"
+            mv "${TGZ_FILES[0]}" "release-artifacts/grandmaster-chess-ai-${VERSION}.tar.gz"
           fi
 
           {
             echo "files<<EOF"
-            [ -f "release-artifacts/chess-game-viewer-${VERSION}.zip" ] && echo "release-artifacts/chess-game-viewer-${VERSION}.zip"
-            [ -f "release-artifacts/chess-game-viewer-${VERSION}.tar.gz" ] && echo "release-artifacts/chess-game-viewer-${VERSION}.tar.gz"
+            [ -f "release-artifacts/grandmaster-chess-ai-${VERSION}.zip" ] && echo "release-artifacts/grandmaster-chess-ai-${VERSION}.zip"
+            [ -f "release-artifacts/grandmaster-chess-ai-${VERSION}.tar.gz" ] && echo "release-artifacts/grandmaster-chess-ai-${VERSION}.tar.gz"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
@@ -263,7 +263,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.next_version.outputs.tag }}
-          name: Chess Game Viewer ${{ steps.next_version.outputs.version }}
+          name: Grandmaster Chess AI ${{ steps.next_version.outputs.version }}
           body: ${{ steps.release_notes.outputs.body }}
           files: ${{ steps.normalize_assets.outputs.files }}
         env:
@@ -279,7 +279,7 @@ jobs:
       - name: Download release artifacts
         uses: actions/download-artifact@v4
         with:
-          name: viewer-distribution-${{ github.run_id }}
+          name: ai-distribution-${{ github.run_id }}
           path: nightly-artifacts/
 
       - name: Get current date
@@ -292,12 +292,12 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: nightly
-          name: Chess Game Viewer Nightly ${{ steps.get_date.outputs.date }}
+          name: Grandmaster Chess AI Nightly ${{ steps.get_date.outputs.date }}
           body: |
-            Latest nightly build of the Chess Game Viewer (WASM edition).
+            Latest nightly build of the Grandmaster Chess AI (WASM edition).
           files: |
-            nightly-artifacts/chess-game-viewer-*.zip
-            nightly-artifacts/chess-game-viewer-*.tar.gz
+            nightly-artifacts/grandmaster-chess-ai-*.zip
+            nightly-artifacts/grandmaster-chess-ai-*.tar.gz
           prerelease: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

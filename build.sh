@@ -26,6 +26,6 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR/chess-engine"
 
 echo "Building chess engine WASM module…"
-wasm-pack build --target web --out-dir ../viewer/pkg --out-name chess_engine
+wasm-pack build --target web --out-dir ../pkg --out-name chess_engine
 
-echo "Build complete. Files written to viewer/pkg/"
+echo "Build complete. Files written to pkg/"

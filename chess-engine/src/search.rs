@@ -99,7 +99,7 @@ fn minimax(
     }
 
     if depth == 0 {
-        return quiescence(pos, alpha, beta, maximizing);
+        return quiescence(pos, alpha, beta, maximizing, 0);
     }
 
     let mut moves: Vec<Move> = pos.legal_moves().into_iter().collect();
@@ -136,7 +136,7 @@ fn minimax(
     }
 }
 
-fn quiescence(pos: &Chess, mut alpha: i32, mut beta: i32, maximizing: bool) -> i32 {
+fn quiescence(pos: &Chess, mut alpha: i32, mut beta: i32, maximizing: bool, q_depth: u32) -> i32 {
     let standby = evaluate(pos);
     
     if maximizing {
@@ -147,9 +147,13 @@ fn quiescence(pos: &Chess, mut alpha: i32, mut beta: i32, maximizing: bool) -> i
         beta = beta.min(standby);
     }
 
+    if q_depth >= 4 {
+        return standby;
+    }
+
     let moves = pos.legal_moves();
     let mut captures: Vec<Move> = moves.into_iter()
-        .filter(|m| m.is_capture() || m.is_en_passant())
+        .filter(|m| m.is_capture() || m.is_en_passant() || pos.is_check())
         .collect();
 
     if captures.is_empty() {
@@ -163,7 +167,7 @@ fn quiescence(pos: &Chess, mut alpha: i32, mut beta: i32, maximizing: bool) -> i
         let mut best = standby;
         for m in captures {
             if let Ok(child) = pos.clone().play(&m) {
-                let val = quiescence(&child, alpha, beta, false);
+                let val = quiescence(&child, alpha, beta, false, q_depth + 1);
                 best = best.max(val);
                 alpha = alpha.max(best);
                 if beta <= alpha {
@@ -176,7 +180,7 @@ fn quiescence(pos: &Chess, mut alpha: i32, mut beta: i32, maximizing: bool) -> i
         let mut best = standby;
         for m in captures {
             if let Ok(child) = pos.clone().play(&m) {
-                let val = quiescence(&child, alpha, beta, true);
+                let val = quiescence(&child, alpha, beta, true, q_depth + 1);
                 best = best.min(val);
                 beta = beta.min(best);
                 if beta <= alpha {
@@ -187,4 +191,3 @@ fn quiescence(pos: &Chess, mut alpha: i32, mut beta: i32, maximizing: bool) -> i
         best
     }
 }
-
