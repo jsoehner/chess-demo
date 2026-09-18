@@ -61,7 +61,7 @@ jobs:
           ls -la grandmaster-chess-ai-*.tar.gz 2>/dev/null || true
 
       - name: Upload distribution artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ai-distribution-${{ github.run_id }}
           path: |
