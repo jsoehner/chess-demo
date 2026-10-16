@@ -260,7 +260,7 @@ jobs:
           ls -la release-artifacts/
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.next_version.outputs.tag }}
           name: Grandmaster Chess AI ${{ steps.next_version.outputs.version }}
@@ -289,7 +289,7 @@ jobs:
           echo "date=$DATE" >> "$GITHUB_OUTPUT"
 
       - name: Create Nightly Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: nightly
           name: Grandmaster Chess AI Nightly ${{ steps.get_date.outputs.date }}
