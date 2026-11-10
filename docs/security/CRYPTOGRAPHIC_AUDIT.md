@@ -1,6 +1,6 @@
 ## 🛡️ Cryptographic Bill of Materials (CBOM) & PQC Migration Assessment
 
-**Format**: CycloneDX (v1.6) | **First-Party Code Crypto Assets**: 0 | **Total Tracked Crypto Assets**: 0
+**Format**: CycloneDX (v1.7) | **First-Party Code Crypto Assets**: 0 | **Total Tracked Crypto Assets**: 0
 
 ### 📊 Post-Quantum Migration Scorecard
 
@@ -15,9 +15,9 @@
 
 | Evaluation Layer | Coverage / Status | Audit Confidence Assessment |
 |---|---|---|
-| **First-Party Code (`src/`)** | **100% Audited** (0 Custom Primitives) | 🟢 **HIGH** (Direct AST & SAST verified clean) |
-| **Third-Party Supply Chain** | **0.0%** (0 of 52 dependencies cataloged) | 🔴 LOW (Known profiles assimilated) |
-| **Overall Audit Confidence Score** | **1.9%** | 🔴 LOW (52 unassimilated supply chain dependencies) |
+| **First-Party Code (`src/`, `scripts/`)** | **100% Audited** (0 Custom Primitives) | 🟢 **HIGH** (Direct AST & SAST verified) |
+| **Third-Party Supply Chain** | **0.0%** (0 of 2 dependencies cataloged) | 🔴 LOW (Known profiles assimilated) |
+| **Overall Audit Confidence Score** | **33.3%** | 🔴 LOW (2 unassimilated supply chain dependencies) |
 
 | **System OS Inventory** | **Pending Update** | 🟡 **Warning** (Local OS crypto components not yet inventoried) |
 
@@ -39,19 +39,5 @@
 
 | Dependency Name | Version | Package URL (purl) | Status |
 |---|---|---|---|
-| `Swatinem/rust-cache` | v2 | `pkg:github/Swatinem/rust-cache@v2` | 🟡 Unassimilated (No upstream CBOM) |
-| `actions/checkout` | v7 | `pkg:github/actions/checkout@v7` | 🟡 Unassimilated (No upstream CBOM) |
-| `actions/checkout` | v7.0.1 | `pkg:github/actions/checkout@v7.0.1` | 🟡 Unassimilated (No upstream CBOM) |
-| `actions/checkout` | v7.0.1 | `pkg:github/actions/checkout@v7.0.1` | 🟡 Unassimilated (No upstream CBOM) |
-| `actions/checkout` | v7.0.1 | `pkg:github/actions/checkout@v7.0.1` | 🟡 Unassimilated (No upstream CBOM) |
-| `actions/download-artifact` | v8 | `pkg:github/actions/download-artifact@v8` | 🟡 Unassimilated (No upstream CBOM) |
-| `actions/setup-python` | v7.1.0 | `pkg:github/actions/setup-python@v7.1.0` | 🟡 Unassimilated (No upstream CBOM) |
-| `actions/upload-artifact` | v4.6.2 | `pkg:github/actions/upload-artifact@v4.6.2` | 🟡 Unassimilated (No upstream CBOM) |
-| `actions/upload-artifact` | v7 | `pkg:github/actions/upload-artifact@v7` | 🟡 Unassimilated (No upstream CBOM) |
-| `anchore/sbom-action` | v0.24.2 | `pkg:github/anchore/sbom-action@v0.24.2` | 🟡 Unassimilated (No upstream CBOM) |
-| `aquasecurity/trivy-action` | v0.36.0 | `pkg:github/aquasecurity/trivy-action@v0.36.0` | 🟡 Unassimilated (No upstream CBOM) |
-| `arrayvec` | 0.7.6 | `pkg:cargo/arrayvec@0.7.6` | 🟡 Unassimilated (No upstream CBOM) |
-| `autocfg` | 1.5.0 | `pkg:cargo/autocfg@1.5.0` | 🟡 Unassimilated (No upstream CBOM) |
-| `bitflags` | 2.11.1 | `pkg:cargo/bitflags@2.11.1` | 🟡 Unassimilated (No upstream CBOM) |
-| `btoi` | 0.4.3 | `pkg:cargo/btoi@0.4.3` | 🟡 Unassimilated (No upstream CBOM) |
-| *... and 37 more unassimilated dependencies* | | | |
+| `chess-demo` | N/A | `N/A` | 🟡 Unassimilated (No upstream CBOM) |
+| `chess-demo` | latest | `pkg:container/chess-demo@latest` | 🟡 Unassimilated (No upstream CBOM) |
