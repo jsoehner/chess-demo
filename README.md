@@ -1,6 +1,10 @@
 # ♜ Advanced Grandmaster AI
 
+[![Build & Functional Verification](https://img.shields.io/badge/Verified-2026--11--20-brightgreen)](docs/BUILD_VERIFICATION.md)
+
 A modern, high-performance browser-based chess game featuring a robust AI opponent built with Rust and WebAssembly.
+
+> **Build Verification:** Last verified functional on `2026-11-20` by **Jeffs' Automated build and deploy agent** — see [`docs/BUILD_VERIFICATION.md`](docs/BUILD_VERIFICATION.md).
 
 ---
 
